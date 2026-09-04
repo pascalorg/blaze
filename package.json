@@ -1,0 +1,17 @@
+{
+  "name": "blaze-skill",
+  "private": true,
+  "description": "The public half of Blaze: the install instructions, the skill, the per-tool plugins, and the Solution Card schema.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pascalorg/blaze.git"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "validate": "bun run --cwd packages/cards validate",
+    "typecheck": "bun run --cwd packages/cards typecheck"
+  }
+}

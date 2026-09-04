@@ -1,0 +1,109 @@
+{
+  "id": "example-utc-date-off-by-one-in-day-grouping",
+  "schema_version": "1.0",
+  "kind": "pitfall",
+  "status": "active",
+  "title": "daily-rollup-is-off-by-one-day-for-users-behind-utc",
+  "trigger": "Use when a daily aggregation, chart bucket or streak counter puts events on the wrong calendar day for some users but not others, and the offset is exactly one day. Covers the case where timestamps are correct but the day key is derived by slicing an ISO string or by using local-time date parts inconsistently.",
+  "anti_trigger": [
+    "Every user sees the same wrong day, including in UTC — that is an off-by-one in the range boundaries of the query, not a timezone problem.",
+    "The timestamps themselves are wrong in the database — fix the write path first; a day-key change will only move the error around.",
+    "Daylight-saving transitions produce a 23- or 25-hour day and a duplicated hour — that is a distinct problem, handled by an interval-aware library, not by choosing a day key."
+  ],
+  "problem_signature": [
+    "the chart shows yesterday's events on today's bar for some users",
+    "streak resets at 19:00 instead of midnight",
+    "counts differ by one day only for users west of UTC",
+    "toISOString().slice(0, 10) used as a group key"
+  ],
+  "problem_statement": "Events are stored as correct UTC instants, but the daily rollup derives its day key by slicing the ISO string, which is a UTC calendar date. For a user in a negative-offset timezone, anything after their local evening cutoff lands on the next UTC day, so a whole evening of activity is attributed to tomorrow. The bug is invisible in UTC and in every positive-offset timezone, so it survives review and local testing.",
+  "context_fingerprint": {
+    "languages": ["typescript", "javascript"],
+    "frameworks": [],
+    "runtime": "node"
+  },
+  "preconditions": [
+    "Timestamps are stored as instants (UTC) rather than naive local datetimes.",
+    "The product defines a day in the user's own timezone, not in UTC."
+  ],
+  "procedure": [
+    {
+      "step": "Write down which timezone the product's day is defined in. Bucketing is only correct once that answer exists; every implementation below is a choice between UTC, the user's zone, and a fixed business zone.",
+      "freedom": "heuristic"
+    },
+    {
+      "step": "Find every place a day key is derived. Grep for ISO slicing, getDate/getMonth arithmetic, and string comparisons on dates: the bug is usually that two of them disagree.",
+      "freedom": "heuristic",
+      "note": "A single wrong key is easy; two keys built differently is what makes the symptom intermittent."
+    },
+    {
+      "step": "Derive the day key from the instant plus an explicit timezone using the platform's own formatter, and put it behind one exported helper so no call site rolls its own.",
+      "freedom": "exact"
+    },
+    {
+      "step": "Reproduce the failure before fixing it: run the grouping with TZ set to a negative-offset zone and an event just before local midnight, and assert the expected day key.",
+      "freedom": "templated"
+    }
+  ],
+  "alternatives_rejected": [
+    "Adding the offset in milliseconds before slicing the ISO string — silently wrong across DST boundaries.",
+    "Storing the local calendar date alongside the instant — a second source of truth that drifts as soon as a user travels."
+  ],
+  "pitfalls": [
+    {
+      "text": "toISOString() always renders UTC, so slicing it gives a UTC calendar date no matter what the process timezone is. This is the whole bug and it reads as correct code.",
+      "severity": "high"
+    },
+    {
+      "text": "Tests pass on a machine whose TZ is UTC or positive. Pin TZ to a negative-offset zone in the test that covers day bucketing, or the regression comes straight back.",
+      "severity": "high"
+    },
+    {
+      "text": "en-US date formatting yields month/day/year, which does not sort. Use the en-CA locale or assemble the parts yourself to get a sortable year-month-day key.",
+      "severity": "medium"
+    }
+  ],
+  "solution": {
+    "summary": "Make the day key a function of an instant and an explicit timezone, computed with the platform's own formatter, and route every caller through it. The timezone becomes a required argument, so no call site can silently fall back to UTC.",
+    "code_snippets": [
+      {
+        "path": "lib/<domain>/day-key.ts",
+        "lang": "ts",
+        "content": "/**\n * Sortable YYYY-MM-DD for `instant` as seen in `timeZone`.\n * The timezone is required on purpose: a default is how this bug returns.\n */\nexport function dayKey(instant: Date, timeZone: string): string {\n  // en-CA renders year-month-day, which sorts lexicographically.\n  return new Intl.DateTimeFormat('en-CA', {\n    timeZone,\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit',\n  }).format(instant)\n}\n\nexport function groupByDay<T>(\n  rows: readonly T[],\n  at: (row: T) => Date,\n  timeZone: string,\n): Map<string, T[]> {\n  const out = new Map<string, T[]>()\n  for (const row of rows) {\n    const key = dayKey(at(row), timeZone)\n    const bucket = out.get(key)\n    if (bucket) bucket.push(row)\n    else out.set(key, [row])\n  }\n  return out\n}"
+      },
+      {
+        "path": "lib/<domain>/day-key.test.ts",
+        "lang": "ts",
+        "content": "import { expect, test } from 'vitest'\nimport { dayKey } from './day-key'\n\n// 23:30 on the 4th in Los Angeles is already the 5th in UTC.\nconst instant = new Date('2026-09-05T06:30:00.000Z')\n\ntest('day key follows the requested timezone, not UTC', () => {\n  expect(dayKey(instant, 'America/Los_Angeles')).toBe('2026-09-04')\n  expect(dayKey(instant, 'UTC')).toBe('2026-09-05')\n})"
+      }
+    ],
+    "commands": []
+  },
+  "verification": {
+    "method": "tests",
+    "commands": ["TZ=America/Los_Angeles <test runner> run day-key"],
+    "expected": "Both assertions pass, and they keep passing when TZ is unset or set to UTC.",
+    "evidence": {
+      "verified_at": "2026-09-04T00:00:00.000Z",
+      "verify_output": "example card: the command above is the shape of the check, not a recorded run"
+    }
+  },
+  "provenance": {
+    "solver_model": "documentation-example",
+    "harness": "hand-written",
+    "created_at": "2026-09-04T00:00:00.000Z",
+    "origin_repo_note": "Example card shipped with @blaze/cards to exercise validate.ts and to show the shape. Not part of the Blaze corpus and never offered by the gateway."
+  },
+  "keywords": [
+    "timezone",
+    "utc",
+    "off-by-one",
+    "date",
+    "toISOString",
+    "Intl.DateTimeFormat",
+    "day bucket",
+    "group by day",
+    "streak",
+    "en-CA"
+  ]
+}

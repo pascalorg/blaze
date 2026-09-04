@@ -1,0 +1,44 @@
+{
+  "name": "@blaze/cards",
+  "version": "0.1.0",
+  "description": "The Blaze Solution Card JSON Schema, its TypeScript type, and a dependency-free validator. Public on purpose: agents and third-party distillers have to be able to read the shape they are writing.",
+  "license": "MIT",
+  "homepage": "https://blaze.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pascalorg/blaze.git",
+    "directory": "packages/cards"
+  },
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema.json": "./schema.json",
+    "./validate": "./validate.ts"
+  },
+  "files": [
+    "src",
+    "examples",
+    "schema.json",
+    "validate.ts",
+    "README.md"
+  ],
+  "bin": {
+    "blaze-validate-cards": "./validate.ts"
+  },
+  "scripts": {
+    "validate": "bun validate.ts --dir examples",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "blaze",
+    "solution-cards",
+    "json-schema",
+    "agents"
+  ],
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.9.0"
+  }
+}

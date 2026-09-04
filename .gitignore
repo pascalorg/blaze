@@ -1,0 +1,19 @@
+# Dependencies
+node_modules
+
+# OS
+.DS_Store
+
+# Editors
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Build / tool caches
+dist
+.turbo
+*.tsbuildinfo
+
+# Local env
+.env
+.env.local
