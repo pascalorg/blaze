@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://blaze.local/schemas/solution-card/1.0.json",
+  "title": "Blaze Solution Card (MVP subset)",
+  "description": "MVP subset of the Solution Card defined in research/04-retrieval-architecture.md §1. Deliberately written without $ref/$defs/anyOf so that (a) the hand-rolled validator in validate.ts stays dependency-free and (b) a simplified copy can be handed to `claude --json-schema` for structured output. Body budget: 400-1200 tokens as rendered by renderCardBody() in validate.ts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "trigger",
+    "anti_trigger",
+    "problem_signature",
+    "problem_statement",
+    "context_fingerprint",
+    "procedure",
+    "pitfalls",
+    "solution",
+    "verification",
+    "provenance",
+    "keywords"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable slug. MUST equal the card's filename without the .json extension so that `GET /cards/:id` resolves by filename.",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,62}$"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["solution", "pitfall", "procedure"]
+    },
+    "status": {
+      "type": "string",
+      "description": "Cards in packages/cards/ are loaded by the gateway. Cards in packages/cards/candidates/ are `candidate` and are only loaded once promoted by moving the file up one directory.",
+      "enum": ["candidate", "active", "deprecated", "retired"]
+    },
+    "replay": {
+      "type": "boolean",
+      "description": "Replay-grade card: produced by a verified run of THIS task on THIS stack, so solution.code_snippets[] hold FULL final file contents and solution.commands[] the non-file edits. Body budget is REPLAY_TOKEN_BUDGET_MAX, not the 1200-token distilled budget."
+    },
+    "title": {
+      "type": "string",
+      "description": "Short problem-shaped phrase. Convention: lowercase kebab-case, e.g. `stripe-webhook-signature-fails-on-reparsed-body`.",
+      "minLength": 8,
+      "maxLength": 100
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Third person. States what the card does AND when to use it. Budget matches the Agent Skills `description` limit of 1024 chars.",
+      "minLength": 40,
+      "maxLength": 1024
+    },
+    "anti_trigger": {
+      "type": "array",
+      "description": "The negative boundary: 2-5 superficially similar problems for which this card is the WRONG answer, each saying where to go instead.",
+      "minItems": 2,
+      "maxItems": 5,
+      "items": { "type": "string", "minLength": 15, "maxLength": 400 }
+    },
+    "problem_signature": {
+      "type": "array",
+      "description": "Verbatim symptom strings a future agent will actually search with: error text, log lines, observed behaviour. Not abstractions.",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": { "type": "string", "minLength": 5, "maxLength": 400 }
+    },
+    "problem_statement": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 600
+    },
+    "problem_statement_normalized": {
+      "type": "string",
+      "maxLength": 300
+    },
+    "context_fingerprint": {
+      "type": "object",
+      "description": "Structured stack filter. Extra keys (runtime, package_manager, repo_shape, os, fingerprint_hash) are allowed and ignored by the MVP gateway.",
+      "additionalProperties": true,
+      "required": ["languages", "frameworks"],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "type": "string", "pattern": "^[a-z0-9+#.-]{1,24}$" }
+        },
+        "frameworks": {
+          "type": "array",
+          "description": "Boosted at retrieval time when `name` intersects the stack detected from the caller's cwd.",
+          "minItems": 0,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "range"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "npm package name as it appears in package.json dependencies.",
+                "pattern": "^[@a-z0-9][a-z0-9@/._-]{0,49}$"
+              },
+              "range": {
+                "type": "string",
+                "description": "semver range the lesson is known to apply to, e.g. \">=16.0.0 <17.0.0\".",
+                "minLength": 1,
+                "maxLength": 60
+              },
+              "version": {
+                "type": "string",
+                "description": "Exact version observed in the originating run.",
+                "maxLength": 40
+              }
+            }
+          }
+        }
+      }
+    },
+    "preconditions": {
+      "type": "array",
+      "maxItems": 6,
+      "items": { "type": "string", "minLength": 5, "maxLength": 240 }
+    },
+    "procedure": {
+      "type": "array",
+      "description": "Ordered steps, each classified by degrees of freedom. `exact` = reproduce verbatim, do not paraphrase. `templated` = keep the shape, substitute the names. `heuristic` = judgement call, adapt to the repo.",
+      "minItems": 2,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "freedom"],
+        "properties": {
+          "step": { "type": "string", "minLength": 8, "maxLength": 400 },
+          "freedom": { "type": "string", "enum": ["exact", "templated", "heuristic"] },
+          "note": { "type": "string", "maxLength": 240 }
+        }
+      }
+    },
+    "alternatives_rejected": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "type": "string", "minLength": 8, "maxLength": 300 }
+    },
+    "pitfalls": {
+      "type": "array",
+      "description": "Capped at 3 (ReasoningBank's item cap). Pitfall 1 MUST be the exact non-obvious gotcha, stated plainly. Target <=32 words per pitfall; validate.ts warns beyond that.",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "severity"],
+        "properties": {
+          "text": { "type": "string", "minLength": 20, "maxLength": 400 },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"] }
+        }
+      }
+    },
+    "solution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "code_snippets"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 20, "maxLength": 600 },
+        "code_snippets": {
+          "type": "array",
+          "description": "One variabilized exemplar is the target. Non-fixed elements should be replaced with descriptive names, not the originating repo's identifiers. A distilled card is capped at 3 snippets (enforced by validate.ts); the higher maxItems exists only for replay cards, which carry every file the verified run wrote.",
+          "minItems": 0,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "lang", "content"],
+            "properties": {
+              "path": { "type": "string", "minLength": 3, "maxLength": 160 },
+              "lang": { "type": "string", "pattern": "^[a-z0-9+#-]{1,12}$" },
+              "content": { "type": "string", "minLength": 10, "maxLength": 8000, "description": "A distilled card carries a fragment; a replay card carries the whole file, hence the generous cap. The rendered-body budget is the real limit." }
+            }
+          }
+        },
+        "commands": {
+          "type": "array",
+          "description": "Edits that are not whole files: a package.json script addition, a codemod invocation. Applied in order, after the snippets are written.",
+          "maxItems": 6,
+          "items": { "type": "string", "minLength": 3, "maxLength": 400 }
+        },
+        "diff_ref": { "type": "string", "maxLength": 300 }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands"],
+      "properties": {
+        "method": { "type": "string", "enum": ["tests", "typecheck", "manual", "build", "grep"] },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": { "type": "string", "minLength": 3, "maxLength": 400 }
+        },
+        "expected": { "type": "string", "maxLength": 400 },
+        "evidence": {
+          "type": "object",
+          "description": "What was actually observed, for a card whose solution has been run: verified_at, verify_script, verify_output.",
+          "additionalProperties": true
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["solver_model", "harness", "created_at", "origin_repo_note"],
+      "properties": {
+        "solver_model": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "harness": { "type": "string", "minLength": 3, "maxLength": 80 },
+        "created_at": { "type": "string", "format": "date-time" },
+        "origin_repo_note": {
+          "type": "string",
+          "description": "How the card was obtained, and on what repo. The literal value `decoy-for-threshold-testing` marks a card that exists only as a retrieval negative.",
+          "minLength": 5,
+          "maxLength": 400
+        }
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "description": "Lexical retrieval surface. Include package names, file conventions, API identifiers and version numbers.",
+      "minItems": 3,
+      "maxItems": 20,
+      "items": { "type": "string", "minLength": 2, "maxLength": 48 }
+    }
+  }
+}

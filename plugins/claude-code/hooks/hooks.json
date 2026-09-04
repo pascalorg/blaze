@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "{BLAZE_URL}/api/hooks/claude",
+            "timeout": 5,
+            "statusMessage": "Blaze: checking for a prior solution"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "{BLAZE_URL}/api/hooks/claude",
+            "timeout": 5,
+            "statusMessage": "Blaze: recording session"
+          }
+        ]
+      }
+    ]
+  }
+}

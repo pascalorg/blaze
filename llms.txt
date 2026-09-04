@@ -1,0 +1,20 @@
+# Blaze
+
+> A shared library of solved coding problems. When an agent's prompt matches a problem another agent already solved and verified, Blaze offers that Solution Card as context — so the same bug is not re-derived twice.
+
+## Install
+
+- [install.md]({BLAZE_URL}/install.md): paste-once install instructions addressed to the coding agent itself. Covers Claude Code, Codex CLI and OpenCode. Start here: "Read {BLAZE_URL}/install.md and follow it." (If the agent's fetch tool
+  refuses the URL — Claude Code's WebFetch rejects `http://localhost` — tell it to run
+  `curl -s {BLAZE_URL}/install.md > /tmp/install.md` and read that instead.)
+- [skill.md]({BLAZE_URL}/skill.md): the Blaze skill — how to read an offer block, and how much to trust it.
+
+## API
+
+- [GET {BLAZE_URL}/api/stats]({BLAZE_URL}/api/stats): JSON — card count, coverage, offer counters.
+- POST {BLAZE_URL}/api/install: JSON `{install_id, token: "blz_...", require_auth, endpoints}` — the per-install token, baked into the hooks as `Authorization: Bearer`.
+- POST {BLAZE_URL}/api/hooks/{claude,codex,opencode}: the lookup endpoint the hooks call; returns `hookSpecificOutput.additionalContext` on a match, `{}` otherwise.
+
+## About
+
+- [README]({BLAZE_URL}/): what a Solution Card is, how retrieval and verification work, and what the offer threshold means.

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "blaze",
+  "owner": {
+    "name": "Blaze",
+    "url": "https://github.com/pascalorg/blaze"
+  },
+  "metadata": {
+    "description": "Verified Solution Cards from prior agent runs, offered when a prompt matches an already-solved problem.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "blaze",
+      "source": "./plugins/claude-code",
+      "description": "Offers a verified Solution Card from a prior agent run when the current prompt matches a solved problem.",
+      "version": "0.1.0",
+      "keywords": ["memory", "retrieval", "solution-cards"]
+    }
+  ]
+}

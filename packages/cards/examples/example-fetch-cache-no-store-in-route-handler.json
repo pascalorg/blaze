@@ -1,0 +1,119 @@
+{
+  "id": "example-fetch-cache-no-store-in-route-handler",
+  "schema_version": "1.0",
+  "kind": "solution",
+  "status": "active",
+  "title": "route-handler-serves-stale-json-because-fetch-was-cached",
+  "trigger": "Use when a Next.js App Router route handler keeps returning the same JSON after the upstream data changed, and the handler itself looks correct. Covers the case where the staleness comes from the framework's fetch cache or from the route being statically rendered at build time, not from application code.",
+  "anti_trigger": [
+    "The stale value is in a browser tab rather than the response body — that is client-side data caching, look at the data library's own revalidation, not at the handler.",
+    "A CDN or reverse proxy in front of the app is serving the old body — inspect the response cache headers and the proxy's rules instead of the fetch call.",
+    "The handler returns fresh data locally but stale data in production only — suspect environment differences in the upstream URL before touching cache options."
+  ],
+  "problem_signature": [
+    "route handler returns the same JSON payload on every request even though the upstream changed",
+    "the response body only changes after a redeploy",
+    "adding a console.log in the handler shows it never runs again after the first request",
+    "GET handler was statically rendered at build time"
+  ],
+  "problem_statement": "A GET route handler fetches JSON from an upstream service and returns it. The upstream data changes, but the handler keeps returning the first payload it ever saw, and only a redeploy refreshes it. Nothing in the handler is obviously wrong, so time gets spent looking for a bug in the transformation code rather than in how the request is cached.",
+  "context_fingerprint": {
+    "languages": [
+      "typescript"
+    ],
+    "frameworks": [
+      {
+        "name": "next",
+        "range": ">=13.0.0",
+        "version": "16.3.4"
+      }
+    ],
+    "runtime": "node"
+  },
+  "preconditions": [
+    "The route is a GET handler in the App Router (app/**/route.ts), not a Pages API route.",
+    "The handler's data comes from fetch(), a database client, or another network call."
+  ],
+  "procedure": [
+    {
+      "step": "Confirm the handler is the stale layer: log a timestamp inside it and hit the endpoint twice. If the timestamp does not move, the handler is not re-running and the cause is caching, not the transformation code.",
+      "freedom": "heuristic",
+      "note": "This single check separates the two candidate causes and is worth doing first."
+    },
+    {
+      "step": "Decide the intent per request, not per file: a handler that must reflect the upstream on every call is dynamic; a handler that may lag by N seconds is revalidating.",
+      "freedom": "heuristic"
+    },
+    {
+      "step": "For an always-fresh handler, pass the no-store cache option on the fetch call itself so the framework does not memoize the response across requests.",
+      "freedom": "exact"
+    },
+    {
+      "step": "For a handler that may lag, set an explicit revalidate window on the fetch instead, and state the window in a comment so the staleness is a documented decision rather than an accident.",
+      "freedom": "templated"
+    },
+    {
+      "step": "Verify against a real upstream mutation, not a restart: change the source data, call the endpoint, and assert the new value comes back without redeploying.",
+      "freedom": "heuristic"
+    }
+  ],
+  "alternatives_rejected": [
+    "Disabling caching for the whole app in the framework config — hides the intent and slows every other route.",
+    "Appending a random query string to the upstream URL to bust the cache — works by accident and defeats upstream caching too."
+  ],
+  "pitfalls": [
+    {
+      "text": "The cache option belongs on the fetch call, not on the Response you return. Setting no-store response headers changes what the client caches and does nothing about the framework's own memoization.",
+      "severity": "high"
+    },
+    {
+      "text": "A GET handler with no dynamic input can be rendered once at build time, so the first payload is baked into the deployment. Hence only a redeploy appears to fix it.",
+      "severity": "high"
+    },
+    {
+      "text": "Reading a request header or search param makes the route dynamic as a side effect, so the same handler can behave differently after an unrelated edit.",
+      "severity": "medium"
+    }
+  ],
+  "solution": {
+    "summary": "State the caching intent explicitly on the data call. Always-fresh handlers pass no-store on the fetch; handlers that may lag pass an explicit revalidate window. Never rely on the default, and never try to fix framework-level memoization with response headers.",
+    "code_snippets": [
+      {
+        "path": "app/api/<resource>/route.ts",
+        "lang": "ts",
+        "content": "// Always fresh: the framework must not memoize this fetch across requests.\nexport async function GET() {\n  const upstream = await fetch(process.env.UPSTREAM_URL!, {\n    cache: 'no-store',\n    headers: { accept: 'application/json' },\n  })\n\n  if (!upstream.ok) {\n    return Response.json({ error: 'upstream_unavailable' }, { status: 502 })\n  }\n\n  return Response.json(await upstream.json())\n}\n\n// Or: may lag by 60s, and says so on purpose.\n// const upstream = await fetch(url, { next: { revalidate: 60 } })"
+      }
+    ],
+    "commands": []
+  },
+  "verification": {
+    "method": "manual",
+    "commands": [
+      "curl -s localhost:3000/api/<resource> | tee /tmp/first.json",
+      "curl -s localhost:3000/api/<resource> | diff - /tmp/first.json"
+    ],
+    "expected": "After mutating the upstream data, the second curl differs from the first without a restart or redeploy.",
+    "evidence": {
+      "verified_at": "2026-09-04T00:00:00.000Z",
+      "verify_output": "example card: the commands above are the shape of the check, not a recorded run"
+    }
+  },
+  "provenance": {
+    "solver_model": "documentation-example",
+    "harness": "hand-written",
+    "created_at": "2026-09-04T00:00:00.000Z",
+    "origin_repo_note": "Example card shipped with @blaze/cards to exercise validate.ts and to show the shape. Not part of the Blaze corpus and never offered by the gateway."
+  },
+  "keywords": [
+    "next",
+    "app-router",
+    "route handler",
+    "fetch",
+    "cache",
+    "no-store",
+    "revalidate",
+    "stale response",
+    "static rendering",
+    "dynamic route"
+  ]
+}
