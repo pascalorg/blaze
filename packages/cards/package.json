@@ -6,7 +6,7 @@
   "homepage": "https://blaze.dev",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pascalorg/blaze.git",
+    "url": "git+https://github.com/pascalorg/blaze-skill.git",
     "directory": "packages/cards"
   },
   "type": "module",
