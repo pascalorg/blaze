@@ -144,9 +144,38 @@ claude plugin list 2>/dev/null | grep -A2 blaze || true
 `claude plugin list` should show `blaze@skills-dir`. Hooks bind at session start, so they
 are live next session; `/reload-plugins` loads them now.
 
-**Fallback**, only if `plugin list` does not show it: merge the same two hook objects into
-the top-level `"hooks"` key of `~/.claude/settings.json` (same shape, merge — never
-overwrite that file) and leave `SKILL.md` in place; it loads as a plain user skill anyway.
+**Fallback**, only if `plugin list` does not show it: run this merge into
+`~/.claude/settings.json`. It preserves unrelated settings and hooks, and resolves the
+helper's installed path explicitly: `${CLAUDE_PLUGIN_ROOT}` is available to plugin
+hooks, not this settings-file fallback. Leave the full `SKILL.md` in place; it loads
+as a plain user skill.
+
+```bash
+python3 - <<'CLAUDE_FALLBACK'
+import json, pathlib, shlex
+root = pathlib.Path.home() / ".claude" / "skills" / "blaze"
+helper = root / "blaze-client.mjs"
+if not helper.is_file():
+    raise SystemExit("Blaze client is missing; complete the installation before merging fallback hooks.")
+source = json.loads((root / "hooks" / "hooks.json").read_text())["hooks"]
+settings = pathlib.Path.home() / ".claude" / "settings.json"
+cfg = json.loads(settings.read_text()) if settings.exists() else {}
+hooks = cfg.setdefault("hooks", {})
+command = "node " + shlex.quote(str(helper)) + " hook --tool claude"
+for event in ("UserPromptSubmit", "Stop"):
+    template = source[event][0]["hooks"][0]
+    groups = hooks.setdefault(event, [])
+    existing = [h for g in groups for h in g.get("hooks", [])
+                if h.get("type") == "command" and h.get("command") in (template["command"], command)]
+    if existing:
+        for hook in existing:
+            hook["command"] = command
+    else:
+        groups.append({"hooks": [{**template, "command": command}]})
+settings.write_text(json.dumps(cfg, indent=2) + "\n")
+print("Blaze fallback hooks merged; the installed skill remains in place.")
+CLAUDE_FALLBACK
+```
 
 Then go to §5.
 
