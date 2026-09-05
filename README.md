@@ -26,7 +26,7 @@ are separate.
 Paste this into whichever agent you already use, and let it do the work:
 
 ```
-Read https://blaze.pascal.app/install.md and follow it.
+Use https://blaze.pascal.app/install.md
 ```
 
 That is the whole install. [`install.md`](./install.md) is addressed to the agent, not to
