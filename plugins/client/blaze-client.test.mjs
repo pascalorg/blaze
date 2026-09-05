@@ -289,3 +289,48 @@ test("installed CLI preserves a receipt across processes and OpenCode consumes f
   assert.equal(status.card,undefined);
   assert.deepEqual(JSON.parse((await cli("delete-contribution","--id",submitted.contribution_id)).stdout),{deleted:true});
 });
+
+test("Claude settings fallback preserves existing configuration and runs without a plugin root", async (t) => {
+  const { origin, stateDir, requests } = await fixture(t, { offered: false });
+  const home = join(stateDir, "person's home with spaces");
+  const root = join(home, ".claude/skills/blaze");
+  mkdirSync(join(root,"hooks"),{recursive:true});
+  const pluginHooks = JSON.parse(readFileSync(fileURLToPath(new URL("../claude-code/hooks/hooks.json",import.meta.url)),"utf8"));
+  copyFileSync(fileURLToPath(new URL("blaze-client.mjs",import.meta.url)),join(root,"blaze-client.mjs"));
+  writeFileSync(join(root,"hooks/hooks.json"),JSON.stringify(pluginHooks));
+  writeFileSync(join(root,"client-config.json"),JSON.stringify({origin}));
+  writeFileSync(join(root,"token"),"synthetic-test-token");
+  writeFileSync(join(root,"SKILL.md"),"Full skill fixture remains in place.\n");
+  const keep={type:"command",command:"echo unrelated-hook",timeout:10};
+  const initial={permissions:{allow:["Read"]},env:{KEEP_SETTING:"synthetic-value"},hooks:{
+    UserPromptSubmit:[{hooks:[keep,{...pluginHooks.hooks.UserPromptSubmit[0].hooks[0]}]}],
+    PreToolUse:[{matcher:"Read",hooks:[keep]}],
+  }};
+  const settings=join(home,".claude/settings.json");
+  writeFileSync(settings,JSON.stringify(initial));
+  const installer=readFileSync(fileURLToPath(new URL("../../install.md",import.meta.url)),"utf8");
+  const script=installer.match(/<<'CLAUDE_FALLBACK'\n([\s\S]*?)\nCLAUDE_FALLBACK\n/)[1];
+  const env={...process.env,HOME:home};delete env.CLAUDE_PLUGIN_ROOT;
+  const run=promisify(execFile);
+  await run("python3",["-c",script],{env});
+  const cfg=JSON.parse(readFileSync(settings,"utf8"));
+  assert.deepEqual(cfg.permissions,initial.permissions);
+  assert.deepEqual(cfg.env,initial.env);
+  assert.deepEqual(cfg.hooks.PreToolUse,initial.hooks.PreToolUse);
+  assert.deepEqual(cfg.hooks.UserPromptSubmit[0].hooks[0],keep);
+  assert.equal(cfg.hooks.UserPromptSubmit.flatMap(g=>g.hooks).length,2);
+  assert.equal(readFileSync(join(root,"SKILL.md"),"utf8"),"Full skill fixture remains in place.\n");
+  await run("python3",["-c",script],{env});
+  assert.deepEqual(JSON.parse(readFileSync(settings,"utf8")),cfg);
+  for(const event of ["UserPromptSubmit","Stop"]){
+    const hook=cfg.hooks[event].flatMap(g=>g.hooks).find(h=>h.command!==keep.command);
+    assert.equal(hook.command.includes("CLAUDE_PLUGIN_ROOT"),false);
+    assert.equal(hook.timeout,5);
+    const pending=run("bash",["-c",hook.command],{env});
+    pending.child.stdin.end(JSON.stringify({hook_event_name:event,prompt:"synthetic fallback task"}));
+    const output=JSON.parse((await pending).stdout);
+    assert.equal(requests.at(-1).path,"/api/hooks/claude");
+    if(event==="UserPromptSubmit")assert.match(output.hookSpecificOutput.additionalContext,/0s credited/);
+    else assert.deepEqual(output,{});
+  }
+});
