@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "description": "The Blaze Solution Card JSON Schema, its TypeScript type, and a dependency-free validator. Public on purpose: agents and third-party distillers have to be able to read the shape they are writing.",
   "license": "MIT",
-  "homepage": "https://blaze.dev",
+  "homepage": "https://blaze.pascal.app",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pascalorg/blaze-skill.git",
+    "url": "git+https://github.com/pascalorg/blaze.git",
     "directory": "packages/cards"
   },
   "type": "module",
