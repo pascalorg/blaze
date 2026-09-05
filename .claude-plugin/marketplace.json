@@ -7,15 +7,19 @@
   },
   "metadata": {
     "description": "Verified Solution Cards from prior agent runs, offered when a prompt matches an already-solved problem.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "blaze",
       "source": "./plugins/claude-code",
       "description": "Offers a verified Solution Card from a prior agent run when the current prompt matches a solved problem.",
-      "version": "0.1.0",
-      "keywords": ["memory", "retrieval", "solution-cards"]
+      "version": "0.2.0",
+      "keywords": [
+        "memory",
+        "retrieval",
+        "solution-cards"
+      ]
     }
   ]
 }
