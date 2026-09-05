@@ -40,6 +40,9 @@ omitted (it would be silently ignored).
 usually already in use, so never overwrite it. `install.md` §3 does the merge idempotently
 with a short Python block.
 
+It also saves the full `skill.md` as `~/.agents/skills/blaze/SKILL.md` and prints
+it for the installing agent to read.
+
 `blaze-hook.sh` belongs at `~/.codex/blaze-hook.sh` (the path the entries name) and reads
 the token from `~/.codex/blaze-token`, mode `600`. It always exits `0` and prints `{}` on
 any failure.
@@ -53,6 +56,10 @@ hooks are inert — expected, not a failed install.
 `blaze.js` belongs in `~/.config/opencode/plugins/`, and reads the token from
 `~/.config/opencode/blaze-token`. Some builds read the singular `plugin/` directory
 instead; if the plugin is missing at next start, copy the file there too.
+
+The installer saves the full `skill.md` as
+`~/.config/opencode/skills/blaze/SKILL.md` and prints it for the installing agent
+to read.
 
 `chat.message` fires with the user's message before its parts are persisted, which is why
 pushing a synthetic text part splices the offer into that same turn. `session.idle` stands

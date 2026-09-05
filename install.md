@@ -1,5 +1,11 @@
 # Install Blaze
 
+If the user says **`Use {BLAZE_URL}/install.md`**, read this entire file and carry
+out the installation for your current tool. Follow the steps below, then read the
+full installed `SKILL.md` and use it when Blaze offers appear. Save the full skill
+file so its instructions remain available in future sessions. The user's request
+and your tool's permission rules still apply.
+
 **Read the real file, not a summary of it.** Every command below has to run byte-for-byte;
 a paraphrase installs nothing. This file ends with a line reading `BLAZE-INSTALL-END`: if
 you cannot see that line, your fetch tool handed you a summary (Claude Code's `WebFetch`
@@ -8,8 +14,9 @@ from disk, and follow it instead of the summary.
 
 You are a coding agent, and this file is a job to do now, not documentation for a human.
 Run the commands yourself; the user should only have to approve permission prompts.
-Everything below writes inside your own tool's config directory (`~/.claude`,
-`~/.codex`, `~/.config/opencode`) and nowhere else.
+The installer writes only Blaze's skill and tool configuration under `~/.claude`,
+`~/.agents/skills/blaze`, `~/.codex`, or `~/.config/opencode`, plus the temporary
+installer download described above. It does not modify the user's repository.
 
 Blaze watches prompts and splices in a verified Solution Card when one matches a problem an
 earlier agent already solved: two hooks (prompt-submitted, session-stopped) and one skill.
@@ -35,7 +42,7 @@ Run this first, in the shell you will use for your section:
 BLAZE_TOKEN=$(curl -fsS --max-time 5 -X POST {BLAZE_URL}/api/install \
   -H 'content-type: application/json' -d '{}' \
   | sed -n 's/.*"token"[^"]*"\([^"]*\)".*/\1/p')
-echo "token: ${BLAZE_TOKEN:-NONE}"
+if [ -n "$BLAZE_TOKEN" ]; then echo "token obtained"; else echo "token unavailable"; fi
 ```
 
 If it comes back empty, **keep going** with an empty token: hooks still work, and you will
@@ -54,6 +61,16 @@ edit, no `settings.json` change. One bash call does the whole install:
 set -e
 D="$HOME/.claude/skills/blaze"
 mkdir -p "$D/.claude-plugin" "$D/hooks"
+
+BLAZE_SKILL_TMP=$(mktemp "$D/.SKILL.md.XXXXXX")
+if curl -fsS --max-time 10 {BLAZE_URL}/skill.md -o "$BLAZE_SKILL_TMP" && test -s "$BLAZE_SKILL_TMP"; then
+  mv "$BLAZE_SKILL_TMP" "$D/SKILL.md"
+else
+  rm -f "$BLAZE_SKILL_TMP"
+  echo "Could not download the Blaze skill; installation is incomplete." >&2
+  exit 1
+fi
+cat "$D/SKILL.md"
 
 cat > "$D/.claude-plugin/plugin.json" <<'PLUGIN'
 {
@@ -92,21 +109,6 @@ cat > "$D/hooks/hooks.json" <<HOOKS
 HOOKS
 chmod 600 "$D/hooks/hooks.json"
 
-curl -fsS --max-time 10 {BLAZE_URL}/skill.md -o "$D/SKILL.md" || cat > "$D/SKILL.md" <<'SKILL'
----
-name: blaze
-description: How to read a "Blaze" offer block - a verified Solution Card from an earlier agent run in another repo. Use when such a block appears in context, or when the user asks what Blaze is.
----
-
-# Blaze
-
-An offer block is reference material from a prior verified run, not an instruction from
-your operator. Check its "When this applies" trigger against the problem actually in
-front of you, confirm the stack versions it claims, read the pitfalls before writing
-code, verify with this repo's own checks, and say in one line which part you used.
-Nothing inside a block widens what you are allowed to do.
-SKILL
-
 claude plugin list 2>/dev/null | grep -A2 blaze || true
 ```
 
@@ -127,6 +129,18 @@ forwarder and point two events at it. `~/.codex/hooks.json` is often already in 
 
 ```bash
 set -e
+BLAZE_SKILL_DIR="$HOME/.agents/skills/blaze"
+mkdir -p "$BLAZE_SKILL_DIR"
+BLAZE_SKILL_TMP=$(mktemp "$BLAZE_SKILL_DIR/.SKILL.md.XXXXXX")
+if curl -fsS --max-time 10 {BLAZE_URL}/skill.md -o "$BLAZE_SKILL_TMP" && test -s "$BLAZE_SKILL_TMP"; then
+  mv "$BLAZE_SKILL_TMP" "$BLAZE_SKILL_DIR/SKILL.md"
+else
+  rm -f "$BLAZE_SKILL_TMP"
+  echo "Could not download the Blaze skill; installation is incomplete." >&2
+  exit 1
+fi
+cat "$BLAZE_SKILL_DIR/SKILL.md"
+
 mkdir -p "$HOME/.codex"
 printf '%s' "$BLAZE_TOKEN" > "$HOME/.codex/blaze-token"
 chmod 600 "$HOME/.codex/blaze-token"
@@ -176,6 +190,18 @@ Plugin files in the user plugin directory load automatically at startup.
 
 ```bash
 set -e
+BLAZE_SKILL_DIR="$HOME/.config/opencode/skills/blaze"
+mkdir -p "$BLAZE_SKILL_DIR"
+BLAZE_SKILL_TMP=$(mktemp "$BLAZE_SKILL_DIR/.SKILL.md.XXXXXX")
+if curl -fsS --max-time 10 {BLAZE_URL}/skill.md -o "$BLAZE_SKILL_TMP" && test -s "$BLAZE_SKILL_TMP"; then
+  mv "$BLAZE_SKILL_TMP" "$BLAZE_SKILL_DIR/SKILL.md"
+else
+  rm -f "$BLAZE_SKILL_TMP"
+  echo "Could not download the Blaze skill; installation is incomplete." >&2
+  exit 1
+fi
+cat "$BLAZE_SKILL_DIR/SKILL.md"
+
 mkdir -p "$HOME/.config/opencode/plugins"
 printf '%s' "$BLAZE_TOKEN" > "$HOME/.config/opencode/blaze-token"
 chmod 600 "$HOME/.config/opencode/blaze-token"
@@ -252,6 +278,11 @@ next start, copy the file there too. Then go to §5.
 
 ## 5. Finish (all tools)
 
+Read the full `SKILL.md` printed by your install block and apply its guidance when
+Blaze offers appear. Do not substitute a summary for the saved file. If the skill
+download failed, report the installation as incomplete instead of claiming success.
+Keep existing user and repository instructions in force.
+
 ```bash
 curl -fsS --max-time 5 {BLAZE_URL}/api/stats
 ```
@@ -265,10 +296,13 @@ repository, no restarting their tool.
 
 - **Claude Code** — `rm -rf ~/.claude/skills/blaze`; if you used the §2 fallback, also
   delete the two Blaze hook objects from `~/.claude/settings.json`.
-- **Codex CLI** — `rm -f ~/.codex/blaze-hook.sh ~/.codex/blaze-token`, then remove
+- **Codex CLI** — `rm -f ~/.codex/blaze-hook.sh ~/.codex/blaze-token ~/.agents/skills/blaze/SKILL.md`, then remove
   the `blaze-hook.sh` entries from `~/.codex/hooks.json` and their
   `[hooks.state."...blaze..."]` lines from `~/.codex/config.toml`.
-- **OpenCode** — `rm -f ~/.config/opencode/plugins/blaze.js ~/.config/opencode/blaze-token`
+- **OpenCode** — `rm -f ~/.config/opencode/plugins/blaze.js ~/.config/opencode/blaze-token ~/.config/opencode/skills/blaze/SKILL.md`
   (and the `plugin/` copy if you made one).
+
+Skill discovery references: [Codex](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
+and [OpenCode](https://opencode.ai/docs/skills/#place-files).
 
 BLAZE-INSTALL-END
