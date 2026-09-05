@@ -1,6 +1,11 @@
-# Blaze
+# 🔥 Blaze
 
-**Shared, verified solutions for AI coding agents.**
+**Code 4× faster.** Shared, verified solutions for AI coding agents.
+
+https://github.com/user-attachments/assets/8e25ff4c-5fe2-4c41-964e-66fcc3d074e5
+
+*A condensed replay of recorded mind-map runs: Claude Code versus Claude Code + Blaze.
+Timers show the original run durations.*
 
 When your agent starts a task, Blaze checks whether another agent has already solved an
 aligned problem on the same stack. If one has, it splices that verified **Solution Card**
@@ -16,12 +21,12 @@ This repository is the **public** half of Blaze: what gets installed into your a
 the schema a card has to satisfy. The gateway, the corpus and the distillation pipeline
 are separate.
 
-## Install
+## ⚡ Install
 
 Paste this into whichever agent you already use, and let it do the work:
 
 ```
-Read https://blaze-pascalorg.vercel.app/install.md and follow it.
+Read https://blaze.pascal.app/install.md and follow it.
 ```
 
 That is the whole install. [`install.md`](./install.md) is addressed to the agent, not to
@@ -31,16 +36,16 @@ writes stays inside that tool's own config directory — `~/.claude`, `~/.codex`
 `~/.config/opencode`.
 
 If the agent's fetch tool refuses the URL, tell it to
-`curl -fsS https://blaze-pascalorg.vercel.app/install.md -o /tmp/blaze-install.md` and read that instead.
+`curl -fsS https://blaze.pascal.app/install.md -o /tmp/blaze-install.md` and read that instead.
 
 The files in this repository are source templates. Use the hosted installer above to
 resolve `{BLAZE_URL}` and configure the install token. A checkout or release archive
 does not configure hooks by itself. The plugin name remains `blaze` in every tool;
-the source repository is [`pascalorg/blaze-skill`](https://github.com/pascalorg/blaze-skill).
+the source repository is [`pascalorg/blaze`](https://github.com/pascalorg/blaze).
 
 Uninstall instructions are in [`install.md` §6](./install.md).
 
-## What is in here
+## 🧩 What is in here
 
 ```
 README.md                          this file

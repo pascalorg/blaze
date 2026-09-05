@@ -9,8 +9,8 @@ repository as its `skill/` Git submodule.
 Install Bun 1.4.0 (also pinned in `package.json`), then:
 
 ```bash
-git clone https://github.com/pascalorg/blaze-skill.git
-cd blaze-skill
+git clone https://github.com/pascalorg/blaze.git
+cd blaze
 bun install --frozen-lockfile
 bun run check
 ```

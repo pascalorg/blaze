@@ -3,7 +3,7 @@
   "name": "blaze",
   "owner": {
     "name": "Blaze",
-    "url": "https://github.com/pascalorg/blaze-skill"
+    "url": "https://github.com/pascalorg/blaze"
   },
   "metadata": {
     "description": "Verified Solution Cards from prior agent runs, offered when a prompt matches an already-solved problem.",
