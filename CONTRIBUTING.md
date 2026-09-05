@@ -17,12 +17,14 @@ bun run check
 
 No application credentials, database, or running gateway are needed. The checks validate
 the two example cards, typecheck the card package, and compare installer blocks with the
-plugin files. They parse scripts without installing hooks or contacting the gateway.
+plugin files. Client tests use a synthetic localhost server and temporary home directory;
+they never install real hooks or contact the hosted gateway.
 
 Keep the Codex and OpenCode inline blocks in `install.md` identical to their files under
 `plugins/`. Keep `skill.md` identical to `plugins/claude-code/skills/blaze/SKILL.md`.
 Claude Code's installed manifest differs from its repository manifest because their
 directory layouts differ; hook settings and version numbers must still agree.
+Keep `plugins/client/blaze-client.mjs` identical to its copy in `plugins/claude-code/`.
 Preserve `{BLAZE_URL}` placeholders and the final `BLAZE-INSTALL-END` marker.
 
 ## Public boundary

@@ -2,12 +2,18 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "blaze",
   "displayName": "Blaze",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Offers a verified Solution Card from a prior agent run when the current prompt matches a solved problem.",
-  "author": { "name": "Blaze" },
+  "author": {
+    "name": "Blaze"
+  },
   "homepage": "https://blaze.pascal.app",
   "repository": "https://github.com/pascalorg/blaze",
-  "keywords": ["memory", "retrieval", "solution-cards"],
+  "keywords": [
+    "memory",
+    "retrieval",
+    "solution-cards"
+  ],
   "hooks": "./hooks/hooks.json",
   "skills": "./skills/"
 }

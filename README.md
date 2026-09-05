@@ -7,15 +7,21 @@ https://github.com/user-attachments/assets/8e25ff4c-5fe2-4c41-964e-66fcc3d074e5
 *A condensed replay of recorded mind-map runs: Claude Code versus Claude Code + Blaze.
 Timers show the original run durations.*
 
-When your agent starts a task, Blaze checks whether another agent has already solved an
-aligned problem on the same stack. If one has, it splices that verified **Solution Card**
-into the conversation: the trap, the procedure, the command that proved the fix worked.
-Your agent decides whether to use it — a card is evidence, not an instruction.
+Blaze is **smart caching for LLM subtasks, built to save users' time**. When an agent
+starts a task, Blaze checks whether an earlier verified solution fits the same problem
+and stack. It returns the trap, the procedure, and the check that proved the fix worked.
+Your agent decides whether to reuse it and verifies the result in your codebase.
 
-Cards come from real runs, are distilled to 400–1200 tokens, and carry the provenance and
-the verification command that earned them. Measured on paired runs of the same
-prompt with the same model, a matching card took a task from 17 turns to 9; a replay-grade
-card from an earlier verified run of the same task gave 2.5× to 6× on wall-clock time.
+Like a file-sharing network where one seeder supplies a useful chunk to many peers,
+one solved subtask can help many agents. Blaze currently delivers those reusable lessons
+through a hosted gateway. Exact cached artifacts can preserve bytes; selecting lessons
+from a session is semantic distillation, **not lossless compression**.
+
+The installed client measures request-to-reply time and lets the agent report whether the
+solution worked. Every task ends with the original solve time, retrieval time, and time
+saved — with unavailable measurements shown as unknown and prior-run savings labeled
+estimated. A slower result remains visible. This feedback is a foundation for improving
+retrieval; it is not proof that automatic learning or a particular speedup has occurred.
 
 This repository is the **public** half of Blaze: what gets installed into your agent, and
 the schema a card has to satisfy. The gateway, the corpus and the distillation pipeline
@@ -31,7 +37,8 @@ Use https://blaze.pascal.app/install.md
 
 That is the whole install. [`install.md`](./install.md) is addressed to the agent, not to
 you: it picks the section for the tool it is running inside, mints a token, writes two
-hooks (prompt-submitted, session-stopped) and one skill, and reports back. Everything it
+hooks (prompt-submitted, session-stopped), one skill and its small dependency-free client,
+and reports back. Node.js 20 or newer is required. Everything it
 writes stays inside that tool's own config directory — `~/.claude`, `~/.codex`, or
 `~/.config/opencode`.
 
@@ -56,7 +63,8 @@ LICENSE                            MIT
 
 .claude-plugin/marketplace.json    Claude Code marketplace metadata (plugin name: blaze)
 plugins/README.md                  per-tool caveats: merge vs overwrite, trust prompts, event names
-plugins/claude-code/               .claude-plugin/plugin.json, hooks/hooks.json (type: http), skills/blaze/SKILL.md
+plugins/claude-code/               .claude-plugin/plugin.json, hooks/hooks.json (type: command), blaze-client.mjs, skills/blaze/SKILL.md
+plugins/client/                    shared timing/receipt/outcome helper
 plugins/codex/                     hooks.json (type: command) + blaze-hook.sh — Codex has no HTTP hook
 plugins/opencode/                  blaze.js — chat.message splices the offer, session.idle closes the session
 
@@ -78,8 +86,30 @@ hard-code a host in its place.
 
 The Codex forwarder and OpenCode module match the blocks `install.md` writes inline.
 Claude Code uses the same hook events with a manifest adapted to the installed directory
-and a token inserted at install time. `install.md` stays self-contained on purpose — an
-agent following it needs one fetch, not a checkout.
+and a private token file written at install time. The installer downloads the helper
+from the same hosted origin; no checkout or extra package installation is needed.
+
+## ⏱️ What the terminal reports
+
+```text
+Blaze · original solve unknown · retrieval 0.28s · time saved unknown
+```
+
+Original time requires verified provenance and a compatible task/environment. The client
+measures the full reply, including network and parsing. Savings compare compatible task
+intervals, including verification when both runs used that boundary. No memory reused
+means zero credited savings; missing evidence stays unknown. Read the [skill](./skill.md)
+for the exact outcome protocol, timing rules, and data boundaries.
+
+## 👤 Optional account
+
+Blaze works without human signup. [Create an account](https://blaze.pascal.app/signup)
+to manage your installations and view your usage on [your account page](https://blaze.pascal.app/account).
+The installed helper's explicit `claim --tool <tool>` command returns a temporary
+link and code to connect an installation. The same helper can submit a minimized
+solution file, read its status, or delete it; see the [contribution instructions](./skill.md#explicit-solution-contributions).
+Contributions are private by default, and public sharing requires explicit authorization
+and trusted evaluation. No transcript is uploaded automatically.
 
 ## Contributing and releases
 

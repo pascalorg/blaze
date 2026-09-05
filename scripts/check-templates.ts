@@ -17,6 +17,8 @@ function inlineBlock(marker: string): string {
 assert.equal(read("plugins/codex/blaze-hook.sh"), inlineBlock("HOOK"), "Codex forwarder drift");
 assert.equal(read("plugins/opencode/blaze.js"), inlineBlock("PLUGINJS"), "OpenCode module drift");
 assert.equal(read("plugins/claude-code/skills/blaze/SKILL.md"), read("skill.md"), "Skill copy drift");
+assert.equal(read("plugins/claude-code/blaze-client.mjs"), read("plugins/client/blaze-client.mjs"), "Client copy drift");
+assert.equal((install.match(/\{BLAZE_URL\}\/blaze-client\.mjs/g) ?? []).length, 3, "Every tool must install the client");
 assert.equal(install.trimEnd().split("\n").at(-1), "BLAZE-INSTALL-END", "Installer end marker missing");
 
 const marketplace = json(".claude-plugin/marketplace.json");
@@ -41,10 +43,9 @@ assert.deepEqual(Object.keys(codexHooks).sort(), events);
 for (const event of events) {
   const template = claudeHooks[event][0].hooks[0];
   const installed = installedHooks[event][0].hooks[0];
-  const { headers, ...withoutAuthorization } = installed;
-  assert.deepEqual(withoutAuthorization, template, `${event} Claude hook drift`);
-  assert.deepEqual(headers, { Authorization: "Bearer $BLAZE_TOKEN" });
-  assert.equal(template.url, "{BLAZE_URL}/api/hooks/claude");
+  assert.deepEqual(installed, template, `${event} Claude hook drift`);
+  assert.equal(template.type, "command");
+  assert.equal(template.command, 'node "${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs" hook --tool claude');
   assert.equal(codexHooks[event][0].hooks[0].command, "~/.codex/blaze-hook.sh");
   assert.equal(codexHooks[event][0].hooks[0].timeout, 5);
 }
@@ -53,4 +54,5 @@ const syntax = Bun.spawnSync(["bash", "-n", resolve(root, "plugins/codex/blaze-h
 assert.equal(syntax.exitCode, 0, "Codex forwarder must be valid Bash");
 // Parsing only: never import the plugin or run installer commands during checks.
 new Bun.Transpiler({ loader: "js" }).transformSync(read("plugins/opencode/blaze.js"));
+new Bun.Transpiler({ loader: "js" }).transformSync(read("plugins/client/blaze-client.mjs"));
 console.log("Installer blocks, plugin metadata, hook events, and script syntax agree.");

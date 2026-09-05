@@ -15,11 +15,15 @@ from disk, and follow it instead of the summary.
 You are a coding agent, and this file is a job to do now, not documentation for a human.
 Run the commands yourself; the user should only have to approve permission prompts.
 The installer writes only Blaze's skill and tool configuration under `~/.claude`,
-`~/.agents/skills/blaze`, `~/.codex`, or `~/.config/opencode`, plus the temporary
+`~/.agents/skills/blaze`, `~/.codex`, or `~/.config/opencode`, including the shared client helper, token, and private timing receipts, plus the temporary
 installer download described above. It does not modify the user's repository.
 
 Blaze watches prompts and splices in a verified Solution Card when one matches a problem an
 earlier agent already solved: two hooks (prompt-submitted, session-stopped) and one skill.
+
+Human signup is optional. Complete the normal installation without creating an account.
+The installed skill explains `/signup`, `/account`, and the helper's explicit `claim`
+command if the user later wants to connect this installation to their account.
 
 ## 0. Which tool are you?
 
@@ -34,9 +38,13 @@ Follow **one** section only: the one for the tool you are running inside.
 More than one directory can exist, so prefer the env-var evidence: you know which binary
 is executing you. Never install two sections.
 
-## 1. Get a token (all tools)
+## 1. Check the runtime and get a token (all tools)
 
-Run this first, in the shell you will use for your section:
+The client requires Node.js 20 or newer, already available in most coding environments.
+Run `node --version` first. If it is missing or older, report the requirement and pause
+installation; do not claim working timing hooks.
+
+Run this next, in the shell you will use for your section:
 
 ```bash
 BLAZE_TOKEN=$(curl -fsS --max-time 5 -X POST {BLAZE_URL}/api/install \
@@ -46,7 +54,8 @@ if [ -n "$BLAZE_TOKEN" ]; then echo "token obtained"; else echo "token unavailab
 ```
 
 If it comes back empty, **keep going** with an empty token: hooks still work, and you will
-mention it in your final line. Do not retry more than once, and never ask the user for a key.
+mention it in your final line. Authenticated outcome reporting will be unavailable until a
+token is obtained. Do not retry more than once, and never ask the user for a key.
 
 Your Bash tool may start a fresh shell per call (Codex does), so run this step and your
 section's block in one call, or `$BLAZE_TOKEN` is empty when the block writes it.
@@ -72,11 +81,22 @@ else
 fi
 cat "$D/SKILL.md"
 
+BLAZE_CLIENT_TMP=$(mktemp "$D/.blaze-client.mjs.XXXXXX")
+if curl -fsS --max-time 10 {BLAZE_URL}/blaze-client.mjs -o "$BLAZE_CLIENT_TMP" && node --input-type=module --check < "$BLAZE_CLIENT_TMP" >/dev/null 2>&1; then
+  mv "$BLAZE_CLIENT_TMP" "$D/blaze-client.mjs"
+else
+  rm -f "$BLAZE_CLIENT_TMP"
+  echo "Could not install the Blaze client; installation is incomplete." >&2
+  exit 1
+fi
+printf '%s\n' '{"origin":"{BLAZE_URL}"}' > "$D/client-config.json"
+chmod 600 "$D/client-config.json"
+
 cat > "$D/.claude-plugin/plugin.json" <<'PLUGIN'
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "blaze",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Offers a verified Solution Card from an earlier agent run when the current prompt matches an already-solved problem.",
   "skills": ["./"]
 }
@@ -84,30 +104,39 @@ PLUGIN
 # hooks/hooks.json is auto-loaded from the plugin root. Do NOT name it in the manifest:
 # a duplicate reference can make every hook in it fail to load.
 
-# Unquoted heredoc on purpose: your shell bakes the token in now. (Header values can
-# interpolate ${VARS} instead, but only with an "allowedEnvVars": ["BLAZE_TOKEN"] entry
-# plus the var in settings.json env; a literal is simpler.) timeout is in seconds.
-cat > "$D/hooks/hooks.json" <<HOOKS
+printf '%s' "$BLAZE_TOKEN" > "$D/token"
+chmod 600 "$D/token"
+
+cat > "$D/hooks/hooks.json" <<'HOOKS'
 {
   "hooks": {
     "UserPromptSubmit": [
-      { "hooks": [ { "type": "http",
-                     "url": "{BLAZE_URL}/api/hooks/claude",
-                     "timeout": 5,
-                     "headers": { "Authorization": "Bearer $BLAZE_TOKEN" },
-                     "statusMessage": "Blaze: checking for a prior solution" } ] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs\" hook --tool claude",
+            "timeout": 5,
+            "statusMessage": "Blaze: checking for a prior solution"
+          }
+        ]
+      }
     ],
     "Stop": [
-      { "hooks": [ { "type": "http",
-                     "url": "{BLAZE_URL}/api/hooks/claude",
-                     "timeout": 5,
-                     "headers": { "Authorization": "Bearer $BLAZE_TOKEN" },
-                     "statusMessage": "Blaze: recording session" } ] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs\" hook --tool claude",
+            "timeout": 5,
+            "statusMessage": "Blaze: recording session"
+          }
+        ]
+      }
     ]
   }
 }
 HOOKS
-chmod 600 "$D/hooks/hooks.json"
 
 claude plugin list 2>/dev/null | grep -A2 blaze || true
 ```
@@ -123,8 +152,8 @@ Then go to §5.
 
 ## 3. Codex CLI
 
-Codex hooks are `type: "command"` only (there is no HTTP handler), so install a one-line
-forwarder and point two events at it. `~/.codex/hooks.json` is often already in use —
+Codex hooks are `type: "command"` only (there is no HTTP handler), so install a
+forwarder to the same timing client and point two events at it. `~/.codex/hooks.json` is often already in use —
 **merge, never overwrite.**
 
 ```bash
@@ -141,22 +170,25 @@ else
 fi
 cat "$BLAZE_SKILL_DIR/SKILL.md"
 
+BLAZE_CLIENT_TMP=$(mktemp "$BLAZE_SKILL_DIR/.blaze-client.mjs.XXXXXX")
+if curl -fsS --max-time 10 {BLAZE_URL}/blaze-client.mjs -o "$BLAZE_CLIENT_TMP" && node --input-type=module --check < "$BLAZE_CLIENT_TMP" >/dev/null 2>&1; then
+  mv "$BLAZE_CLIENT_TMP" "$BLAZE_SKILL_DIR/blaze-client.mjs"
+else
+  rm -f "$BLAZE_CLIENT_TMP"
+  echo "Could not install the Blaze client; installation is incomplete." >&2
+  exit 1
+fi
+printf '%s\n' '{"origin":"{BLAZE_URL}"}' > "$BLAZE_SKILL_DIR/client-config.json"
+chmod 600 "$BLAZE_SKILL_DIR/client-config.json"
+
 mkdir -p "$HOME/.codex"
 printf '%s' "$BLAZE_TOKEN" > "$HOME/.codex/blaze-token"
 chmod 600 "$HOME/.codex/blaze-token"
 
 cat > "$HOME/.codex/blaze-hook.sh" <<'HOOK'
 #!/usr/bin/env bash
-# stdin: hook payload -> gateway -> stdout: hook output.
-# Never blocks: on any failure print {} and exit 0.
-set -uo pipefail
-TOKEN=$(cat "$HOME/.codex/blaze-token" 2>/dev/null || true)
-R=$(curl -sS --max-time 5 -X POST '{BLAZE_URL}/api/hooks/codex' \
-      -H 'content-type: application/json' \
-      -H "Authorization: Bearer ${TOKEN}" \
-      --data-binary @- 2>/dev/null) || R=''
-[ -z "$R" ] && R='{}'
-printf '%s' "$R"
+# The shared helper measures retrieval and stores private decision receipts.
+node "$HOME/.agents/skills/blaze/blaze-client.mjs" hook --tool codex 2>/dev/null || printf '{}'
 exit 0
 HOOK
 chmod +x "$HOME/.codex/blaze-hook.sh"
@@ -202,39 +234,28 @@ else
 fi
 cat "$BLAZE_SKILL_DIR/SKILL.md"
 
+BLAZE_CLIENT_TMP=$(mktemp "$BLAZE_SKILL_DIR/.blaze-client.mjs.XXXXXX")
+if curl -fsS --max-time 10 {BLAZE_URL}/blaze-client.mjs -o "$BLAZE_CLIENT_TMP" && node --input-type=module --check < "$BLAZE_CLIENT_TMP" >/dev/null 2>&1; then
+  mv "$BLAZE_CLIENT_TMP" "$BLAZE_SKILL_DIR/blaze-client.mjs"
+else
+  rm -f "$BLAZE_CLIENT_TMP"
+  echo "Could not install the Blaze client; installation is incomplete." >&2
+  exit 1
+fi
+printf '%s\n' '{"origin":"{BLAZE_URL}"}' > "$BLAZE_SKILL_DIR/client-config.json"
+chmod 600 "$BLAZE_SKILL_DIR/client-config.json"
+
 mkdir -p "$HOME/.config/opencode/plugins"
 printf '%s' "$BLAZE_TOKEN" > "$HOME/.config/opencode/blaze-token"
 chmod 600 "$HOME/.config/opencode/blaze-token"
 
 cat > "$HOME/.config/opencode/plugins/blaze.js" <<'PLUGINJS'
-import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { createClientForTool } from "../skills/blaze/blaze-client.mjs";
 
-const GATEWAY = "{BLAZE_URL}";
-let TOKEN = "";
-try {
-  TOKEN = readFileSync(`${homedir()}/.config/opencode/blaze-token`, "utf8").trim();
-} catch {}
-
-async function ask(body) {
-  try {
-    const res = await fetch(`${GATEWAY}/api/hooks/opencode`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}),
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(5000),
-    });
-    return res.ok ? await res.json() : {};
-  } catch {
-    // A gateway that is down or slow must never block a turn.
-    return {};
-  }
-}
-
-export const blaze = async ({ directory }) => ({
+export const blaze = async ({ directory }) => {
+  const client = createClientForTool("opencode");
+  const ask = async (body) => { try { return await client.hook(body); } catch { return {}; } };
+  return {
   // Fires with the user's message before its parts are persisted, so pushing a
   // synthetic text part splices the offer into this same turn.
   "chat.message": async (_input, output) => {
@@ -249,11 +270,12 @@ export const blaze = async ({ directory }) => ({
       prompt,
       cwd: directory,
       session_id: output.message.sessionID,
+      client_event_id: `opencode:${output.message.id}`,
     });
-    const ctx = res?.hookSpecificOutput?.additionalContext;
+    const ctx = res?.additionalContext ?? res?.hookSpecificOutput?.additionalContext;
     if (!ctx) return;
     output.parts.push({
-      id: `mtm_${Date.now().toString(36)}`,
+      id: `blz_${Date.now().toString(36)}`,
       messageID: output.message.id,
       sessionID: output.message.sessionID,
       type: "text",
@@ -269,7 +291,8 @@ export const blaze = async ({ directory }) => ({
       session_id: event.properties?.sessionID,
     });
   },
-});
+  };
+};
 PLUGINJS
 ```
 
@@ -296,11 +319,11 @@ repository, no restarting their tool.
 
 - **Claude Code** — `rm -rf ~/.claude/skills/blaze`; if you used the §2 fallback, also
   delete the two Blaze hook objects from `~/.claude/settings.json`.
-- **Codex CLI** — `rm -f ~/.codex/blaze-hook.sh ~/.codex/blaze-token ~/.agents/skills/blaze/SKILL.md`, then remove
+- **Codex CLI** — `rm -f ~/.codex/blaze-hook.sh ~/.codex/blaze-token ~/.agents/skills/blaze/SKILL.md ~/.agents/skills/blaze/blaze-client.mjs ~/.agents/skills/blaze/client-config.json`, then remove
   the `blaze-hook.sh` entries from `~/.codex/hooks.json` and their
-  `[hooks.state."...blaze..."]` lines from `~/.codex/config.toml`.
-- **OpenCode** — `rm -f ~/.config/opencode/plugins/blaze.js ~/.config/opencode/blaze-token ~/.config/opencode/skills/blaze/SKILL.md`
-  (and the `plugin/` copy if you made one).
+  `[hooks.state."...blaze..."]` lines from `~/.codex/config.toml`. Remove `~/.agents/skills/blaze/receipts` to erase local timing receipts.
+- **OpenCode** — `rm -f ~/.config/opencode/plugins/blaze.js ~/.config/opencode/blaze-token ~/.config/opencode/skills/blaze/SKILL.md ~/.config/opencode/skills/blaze/blaze-client.mjs ~/.config/opencode/skills/blaze/client-config.json`
+  (and the `plugin/` copy if you made one). Remove `~/.config/opencode/skills/blaze/receipts` to erase local timing receipts.
 
 Skill discovery references: [Codex](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills)
 and [OpenCode](https://opencode.ai/docs/skills/#place-files).

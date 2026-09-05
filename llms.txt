@@ -1,10 +1,10 @@
 # Blaze
 
-> A shared library of solved coding problems. When an agent's prompt matches a problem another agent already solved and verified, Blaze offers that Solution Card as context — so the same bug is not re-derived twice.
+> Smart caching for LLM subtasks, built to save users' time. Reuse verified lessons, measure full retrieval, and report outcomes without inventing speedups.
 
 ## Install
 
-- [install.md]({BLAZE_URL}/install.md): paste-once install instructions addressed to the coding agent itself. Covers Claude Code, Codex CLI and OpenCode. Start here: "Read {BLAZE_URL}/install.md and follow it." (If the agent's fetch tool
+- [install.md]({BLAZE_URL}/install.md): paste-once install instructions addressed to the coding agent itself. Covers Claude Code, Codex CLI and OpenCode. Start here: "Use {BLAZE_URL}/install.md" (If the agent's fetch tool
   refuses the URL — Claude Code's WebFetch rejects `http://localhost` — tell it to run
   `curl -s {BLAZE_URL}/install.md > /tmp/install.md` and read that instead.)
 - [skill.md]({BLAZE_URL}/skill.md): the Blaze skill — how to read an offer block, and how much to trust it.
@@ -13,7 +13,14 @@
 
 - [GET {BLAZE_URL}/api/stats]({BLAZE_URL}/api/stats): JSON — card count, coverage, offer counters.
 - POST {BLAZE_URL}/api/install: JSON `{install_id, token: "blz_...", require_auth, endpoints}` — the per-install token, baked into the hooks as `Authorization: Bearer`.
-- POST {BLAZE_URL}/api/hooks/{claude,codex,opencode}: the lookup endpoint the hooks call; returns `hookSpecificOutput.additionalContext` on a match, `{}` otherwise.
+- POST {BLAZE_URL}/api/hooks/{claude,codex,opencode}: the lookup endpoint the hooks call; returns `hookSpecificOutput.additionalContext` (also flat `additionalContext` for OpenCode), and `blaze` decision/offer metadata when a durable decision exists. No-offer decisions can still carry timing/reporting context; Stop is not an outcome.
+
+- POST {BLAZE_URL}/api/lookup: explicit lookup with optional stable `client_event_id` and compatible 64-hex `context_fingerprint`; returns decision and offer IDs.
+- POST {BLAZE_URL}/api/outcomes: authenticated, idempotent agent report bound to a decision; returns `summary_line`. Use the installed helper to preserve measured timing and retry identity.
+- [blaze-client.mjs]({BLAZE_URL}/blaze-client.mjs): dependency-free Node.js 20+ helper installed alongside the skill; commands `hook`, `lookup`, `card`, `outcome`, `summary`, `claim`, `contribute`, `contribution`, `delete-contribution`.
+- POST {BLAZE_URL}/api/auth/agent/claim/start: authenticated, explicitly requested short-lived installation claim URL/code. Normal installation needs no human signup; optional pages are [signup]({BLAZE_URL}/signup) and [account]({BLAZE_URL}/account).
+- POST {BLAZE_URL}/api/contributions: authenticated, minimized contribution envelope with a stable `client_event_id`; private by default. Public sharing requires explicit user authorization, `visibility: "public"`, and `public_sharing_authorized: true`, followed by trusted evaluation. Use `contribute --tool <tool> --file <minimized-card.json>`; never automatically upload a transcript.
+- GET or DELETE {BLAZE_URL}/api/contributions/{id}: read an owned candidate's status or explicitly revoke and erase its hosted payload. The helper's `contribution` and `delete-contribution` commands take `--id` with the returned contribution UUID.
 
 ## About
 
