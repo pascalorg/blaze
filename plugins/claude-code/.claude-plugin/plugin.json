@@ -5,8 +5,8 @@
   "version": "0.1.0",
   "description": "Offers a verified Solution Card from a prior agent run when the current prompt matches a solved problem.",
   "author": { "name": "Blaze" },
-  "homepage": "https://blaze.dev",
-  "repository": "https://github.com/pascalorg/blaze",
+  "homepage": "https://blaze-pascalorg.vercel.app",
+  "repository": "https://github.com/pascalorg/blaze-skill",
   "keywords": ["memory", "retrieval", "solution-cards"],
   "hooks": "./hooks/hooks.json",
   "skills": "./skills/"

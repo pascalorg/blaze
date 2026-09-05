@@ -1,8 +1,10 @@
 # Plugins
 
-One directory per tool. Each is an extracted copy of what [`../install.md`](../install.md)
-writes inline, byte-identical to it — `install.md` stays self-contained so an agent
-following it needs one fetch and no checkout. Edit both, or neither.
+One directory per tool. The Codex forwarder and OpenCode module are byte-identical to
+the blocks [`../install.md`](../install.md) writes inline. Claude Code has a repository
+manifest and an install-time manifest for their different directory layouts; its hook
+events match, with authorization added at install time. Keep corresponding files in
+sync. `bun run check:templates` checks these relationships.
 
 `{BLAZE_URL}` is a literal placeholder in every file here. The gateway substitutes the
 origin the reader fetched from, so the same file is correct on localhost, on a preview
@@ -19,12 +21,11 @@ returns nothing and the turn proceeds. Nothing Blaze installs can block a prompt
 
 ## `claude-code/`
 
-A standard Claude Code plugin: `.claude-plugin/plugin.json`, `hooks/hooks.json`,
-`skills/blaze/SKILL.md`. Installable three ways, all verified: through the marketplace
-(`../.claude-plugin/marketplace.json`), with `claude --plugin-dir <abs path to this dir>`,
-or by the `install.md` §2 path, which writes the same shapes into
-`~/.claude/skills/blaze/` where a directory containing `.claude-plugin/plugin.json`
-auto-loads as a user plugin.
+A Claude Code plugin layout: `.claude-plugin/plugin.json`, `hooks/hooks.json`,
+`skills/blaze/SKILL.md`. The marketplace metadata names it `blaze`. The checked-in
+hooks contain `{BLAZE_URL}` placeholders, so registering this source directory alone
+does not configure a gateway. Use the hosted `install.md` §2 path, which resolves the
+origin and writes the token and installed layout into `~/.claude/skills/blaze/`.
 
 `skills/blaze/SKILL.md` is a copy of [`../skill.md`](../skill.md) — the plugin ships the
 skill so a fresh install works before the first gateway fetch. Keep them identical.

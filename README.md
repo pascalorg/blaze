@@ -21,7 +21,7 @@ are separate.
 Paste this into whichever agent you already use, and let it do the work:
 
 ```
-Read https://blaze.dev/install.md and follow it.
+Read https://blaze-pascalorg.vercel.app/install.md and follow it.
 ```
 
 That is the whole install. [`install.md`](./install.md) is addressed to the agent, not to
@@ -31,15 +31,12 @@ writes stays inside that tool's own config directory — `~/.claude`, `~/.codex`
 `~/.config/opencode`.
 
 If the agent's fetch tool refuses the URL, tell it to
-`curl -s https://blaze.dev/install.md > /tmp/install.md` and read that instead.
+`curl -fsS https://blaze-pascalorg.vercel.app/install.md -o /tmp/blaze-install.md` and read that instead.
 
-### If you would rather run a command yourself
-
-| Tool | Command |
-| --- | --- |
-| Claude Code | `claude plugin marketplace add pascalorg/blaze && claude plugin install blaze@blaze` |
-| Codex | `codex plugin marketplace add pascalorg/blaze && codex plugin add blaze@blaze` |
-| OpenCode | add `"plugin": ["blaze@1"]` to `opencode.json` |
+The files in this repository are source templates. Use the hosted installer above to
+resolve `{BLAZE_URL}` and configure the install token. A checkout or release archive
+does not configure hooks by itself. The plugin name remains `blaze` in every tool;
+the source repository is [`pascalorg/blaze-skill`](https://github.com/pascalorg/blaze-skill).
 
 Uninstall instructions are in [`install.md` §6](./install.md).
 
@@ -52,7 +49,7 @@ skill.md                           the Blaze skill: how to read an offer block, 
 llms.txt                           machine-readable index of the above plus the API
 LICENSE                            MIT
 
-.claude-plugin/marketplace.json    makes `claude plugin marketplace add pascalorg/blaze` resolve
+.claude-plugin/marketplace.json    Claude Code marketplace metadata (plugin name: blaze)
 plugins/README.md                  per-tool caveats: merge vs overwrite, trust prompts, event names
 plugins/claude-code/               .claude-plugin/plugin.json, hooks/hooks.json (type: http), skills/blaze/SKILL.md
 plugins/codex/                     hooks.json (type: command) + blaze-hook.sh — Codex has no HTTP hook
@@ -70,9 +67,16 @@ plugin files. The gateway substitutes the origin the reader actually fetched fro
 same file is correct on localhost, on a preview deployment and in production. Do not
 hard-code a host in its place.
 
-The plugin files are extracted copies of the blocks `install.md` writes inline, kept
-byte-identical to them. `install.md` stays self-contained on purpose — an agent following
-it needs one fetch, not a checkout.
+The Codex forwarder and OpenCode module match the blocks `install.md` writes inline.
+Claude Code uses the same hook events with a manifest adapted to the installed directory
+and a token inserted at install time. `install.md` stays self-contained on purpose — an
+agent following it needs one fetch, not a checkout.
+
+## Contributing and releases
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for a standalone checkout, `bun run check`,
+the contribution boundary, and versioned GitHub release archives. This repository's
+release workflow does not publish npm packages or deploy the hosted gateway.
 
 ## The card schema
 
