@@ -89,12 +89,14 @@ retry. The skill asks the agent to copy the returned three-times summary at the 
 its answer.
 
 The helper's `lookup` command accepts an inspected, one-line conceptual problem, plus
-optional fingerprints of reviewed, non-sensitive compatibility labels and client event
-IDs. A digest does not anonymize private source, paths, prompts, manifests, or identifiers.
-It sends a strict `minimized: true` privacy contract and rejects raw-context fields, obvious credentials,
-paths, URLs, code-shaped input, and unknown fields. This validation is a guardrail rather
-than proof that text is safe. See the full skill for the human review boundary and timing
-rules. Run `bun run test:client` for local-only transport/protocol tests.
+an optional fingerprint for the same exact public or fully non-sensitive reproducible
+fixture and optional client event IDs. A generalized problem is insufficient for timing
+comparison, and a digest does not anonymize private source, paths, prompts, manifests, or
+identifiers. It sends a strict `minimized: true` privacy contract and rejects raw-context
+fields, obvious credentials, paths, URLs, code-shaped input, and unknown fields. This
+validation is a guardrail rather than proof that text is safe. See the full skill for the
+human review boundary and timing rules. Run `bun run test:client` for local-only
+transport/protocol tests.
 
 ## Optional account and contributions
 
