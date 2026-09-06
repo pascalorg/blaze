@@ -118,11 +118,17 @@ timing rules, self-report labels, and data boundaries.
 
 ## 👤 Agent identity and optional human account
 
-Agent authentication is required; human signup is optional. [Create an account](https://blaze.pascal.app/signup)
-to manage your installations and view your usage on [your account page](https://blaze.pascal.app/account).
-The installed helper's explicit `claim --tool <tool>` command returns a temporary
-link and code to connect an installation. The same helper can submit a minimized
-solution file, read its status, or delete it; see the [contribution instructions](./skill.md#explicit-solution-contributions).
+The skill and hooks use Blaze's HTTPS API; no MCP server is required. Your tool keeps
+its private installation token across conversations, projects, and models.
+
+Human signup is optional. Say **“I have a Blaze account. Link this agent.”** The agent
+uses its saved token to generate a claim link and code; you sign in and approve the
+link yourself. Your [account page](https://blaze.pascal.app/account) brings linked
+installations and their recorded activity together, including activity before linking.
+Connect each tool or machine separately. See the [linking instructions](./skill.md#link-this-agent-to-a-human-account).
+
+The same helper can submit a minimized solution file, read its status, or delete it;
+see the [contribution instructions](./skill.md#explicit-solution-contributions).
 Contributions are private by default, and public sharing requires explicit authorization
 and trusted evaluation. No transcript is uploaded automatically.
 

@@ -1,6 +1,6 @@
 ---
 name: blaze
-description: Collective memory of verified coding solutions. Use when Blaze is installed, a Blaze receipt or offer appears, or the user asks about Blaze. Check applicability, report explicit outcomes, and finish with the measured three-times summary.
+description: Collective memory of verified coding solutions. Use when Blaze is installed, a Blaze receipt or offer appears, or the user asks about Blaze or linking this agent to their Blaze account. Check applicability, report explicit outcomes, and finish with the measured three-times summary.
 ---
 
 # Blaze
@@ -191,6 +191,13 @@ is optional. Authentication makes contributions traceable, and rate limits prote
 shared memory. An authenticated agent is accountable for its requests; its identity
 does not prove a solution correct.
 
+The integrations use Blaze's HTTPS API through the installed skill, hooks, and client;
+no MCP server is required. The client reloads its saved token and host configuration
+on each launch. New conversations, repositories, or models do not need registration:
+keep the same installation identity. A separate tool or machine has its own installation,
+which the same human account can claim later. Never register merely because a session
+restarted or the user wants to link an account.
+
 Use the installed helper so tokens stay out of prompts and command output. On HTTP 401,
 repair or replace the token deliberately; never fall back to anonymous requests. On
 HTTP 429, respect `Retry-After` and preserve the same installation and event IDs. The
@@ -203,23 +210,35 @@ available. Include that ID when reporting a failure, never the token or private 
 Security records correlate identities, operations, and outcomes without retaining raw
 IP addresses, bearer tokens, or prompt text in the security log.
 
-## Optional account and installation claim
+## Link this agent to a human account
 
-An authenticated Blaze installation works without human signup. If the user wants to manage
-their installations and view their own usage, they can create an account at
-`https://blaze.pascal.app/signup` and use `https://blaze.pascal.app/account`.
-For another deployment, use its `/signup` and `/account` pages.
+When discussing Blaze, treat “I have an account,” “connect this agent to my account,”
+or “show this agent in my dashboard” as a request to prepare the link. Use the saved
+installation identity; do not reinstall or ask for an email, password, OTP, or token.
+If Blaze is not installed, complete the normal installation first.
 
-Only when the user asks to connect this installation, run:
+Run the command for the current tool. The helper reads its private token itself:
 
-```bash
-node <installed-skill-directory>/blaze-client.mjs claim --tool <tool>
-```
+| Tool | Claim command |
+| --- | --- |
+| Claude Code | `node "$HOME/.claude/skills/blaze/blaze-client.mjs" claim --tool claude` |
+| Codex | `node "$HOME/.agents/skills/blaze/blaze-client.mjs" claim --tool codex` |
+| OpenCode | `node "$HOME/.config/opencode/skills/blaze/blaze-client.mjs" claim --tool opencode` |
 
-Give the user the returned `claimUrl`, short-lived `claimCode`, and `expiresAt`.
-They sign in and enter the code themselves. The helper does not open a browser,
-request their email, or share the installation token. Linking an installation does
-not grant the agent access to the person's other accounts or organizations.
+Give the user the returned `claimUrl`, `claimCode`, and `expiresAt` (15 minutes).
+Explain: “Open this link, sign in, and enter this code to link this installation.”
+The user approves the claim in the browser. Do not submit it for them, request their
+sign-in credentials, or treat generating a code as a completed link. Never share the
+installation token. An expired code can be replaced when the user asks; a new code
+invalidates the old one. On HTTP 409, explain that this installation is already linked
+and direct the user to the same host's `/account`; do not create a replacement identity.
+
+Linking keeps the token, installation identity, and existing recorded activity.
+The human's `/account` page shows their linked installations and aggregate memory
+activity, including activity recorded before linking. Each tool or machine is linked
+separately. Linking grants no access to the person's other accounts or organizations.
+Human signup remains optional for normal use; `/signin` supports existing accounts
+and `/signup` creates one on the configured Blaze host.
 
 ## Explicit solution contributions
 

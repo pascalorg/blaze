@@ -25,8 +25,11 @@ when a prompt matches; your agent checks it in the current codebase.
 Every service request requires a private installation token. Authentication makes
 contributions traceable; rate limits protect the shared resource. Human signup is
 optional. Complete the normal installation without creating an account.
-The installed skill explains `/signup`, `/account`, and the helper's explicit `claim`
-command if the user later wants to connect this installation to their account.
+The installed client uses Blaze's HTTPS API; no MCP server is required. It reloads
+this saved identity on later sessions. If the user says “I have a Blaze account” or
+asks to link this agent, follow the installed skill's account-linking instructions:
+prepare a claim code with the existing token, then let the human approve it in their
+browser. Do not create another installation for linking.
 
 ## 0. Which tool are you?
 

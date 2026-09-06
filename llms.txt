@@ -11,6 +11,16 @@ Exact artifact replay is byte-for-byte; Solution Cards are lossy semantic distil
   `curl -s {BLAZE_URL}/install.md > /tmp/install.md` and read that instead.)
 - [skill.md]({BLAZE_URL}/skill.md): the Blaze skill — how to read an offer block, and how much to trust it.
 
+## Identity and account linking
+
+The installed skill and hooks call Blaze's HTTPS API; no MCP server is required.
+Reuse the saved token and configured host across sessions. Each tool or machine has
+its own installation. In a Blaze conversation, “I have an account” or “link this
+agent” means prepare a claim using the installed helper and existing token, then
+have the human sign in and approve the code. Never submit the claim for them or
+expose their token. Follow [skill.md]({BLAZE_URL}/skill.md#link-this-agent-to-a-human-account).
+Linking preserves recorded activity and adds the installation to the human's account.
+
 ## API
 
 All service endpoints below require `Authorization: Bearer blz_...`, except the
