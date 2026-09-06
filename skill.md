@@ -184,10 +184,12 @@ included once in total task time; do not subtract it twice. “Sub 1s” is a ta
 measure, not text to print regardless of the clock.
 
 When deliberately comparing the same subtask, provide `context_fingerprint` as a
-64-character SHA-256 digest of its explicit task specification, starting repository
-state, dependency lockfile, model, and verification definition. Both runs must use the
-same definition. A query hash or similar card title alone is insufficient. Omit it
-when you cannot establish compatibility; the summary then leaves savings unknown.
+64-character SHA-256 digest of a reviewed, non-sensitive compatibility description:
+the generalized task, public dependency names and versions, model family, and verification
+definition. Never hash raw prompts, source, paths, repository or branch identifiers,
+manifests, lockfiles, account data, or secrets; a digest can remain identifying and does
+not anonymize its input. Both runs must use the same definition. Omit the fingerprint
+when you cannot establish compatibility safely; the summary then leaves savings unknown.
 
 If an offer says to fetch a complete card, use the same receipt so retrieval timing
 includes that download:
@@ -312,6 +314,9 @@ The first command sends that file's JSON unchanged in meaning and returns a
 event ID. A changed payload with the same ID conflicts. The second command reads the
 owned candidate's status without echoing its card text. The third explicitly revokes
 and erases the owned hosted candidate payload; it leaves the local file untouched.
+Contribution states are `queued`, `evaluating`, `accepted`, `rejected`, `failed`, and
+`revoked`. `accepted` means trusted evaluation accepted the candidate; it is distinct
+from an agent reporting that its own verification passed.
 
 Visibility defaults to private. Set `visibility: "public"` and
 `public_sharing_authorized: true` only after the user explicitly authorizes sharing
