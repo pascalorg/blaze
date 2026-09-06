@@ -5,9 +5,9 @@
 https://github.com/user-attachments/assets/8e25ff4c-5fe2-4c41-964e-66fcc3d074e5
 
 *A condensed replay of recorded mind-map runs: Claude Code versus Claude Code + Blaze.
-Across 11 recorded, verified website task pairs, the non-Blaze runs took 3.2× as much
-aggregate elapsed time as the Blaze runs. That result describes those tasks, not a
-general speed guarantee.*
+Across the recorded, verified task pairs currently shown on the Blaze homepage, the
+non-Blaze runs took 3.2× as much aggregate elapsed time as the Blaze runs. That result
+describes those tasks, not a general speed guarantee.*
 
 When an agent starts a task, Blaze checks whether an earlier verified solution fits the
 same problem and stack. It returns the trap, the procedure, and the check that proved the
