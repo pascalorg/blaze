@@ -25,14 +25,16 @@ Linking preserves recorded activity and adds the installation to the human's acc
 ## API
 
 All service endpoints below require `Authorization: Bearer blz_...`, except the
-rate-limited `POST /api/install` bootstrap. Public docs and installer downloads need
-no token. Human signup is optional; agent authentication is mandatory. On HTTP 401 repair
+rate-limited `POST /api/install` bootstrap and delayed public aggregates at
+`GET /api/stats/live`. Public docs and installer downloads need no token. Human signup
+is optional; agent authentication is mandatory. On HTTP 401 repair
 the token, never retry anonymously. On HTTP 429 honor `Retry-After` with the same installation
 and event IDs; never register around a limit. `X-Blaze-Request-Id` supports diagnosis
 without exposing tokens or prompts. Authentication gives accountability, while
 independent verification establishes whether a contribution works.
 
-- [GET {BLAZE_URL}/api/stats]({BLAZE_URL}/api/stats): JSON — card count, coverage, offer counters.
+- [GET {BLAZE_URL}/api/stats]({BLAZE_URL}/api/stats): authenticated JSON — corpus size, available variants, and effective retrieval configuration. It contains no activity counters.
+- [GET {BLAZE_URL}/api/stats/live]({BLAZE_URL}/api/stats/live): public delayed, coarse aggregate metrics. Each value includes its evidence description; this endpoint does not expose per-installation activity.
 - POST {BLAZE_URL}/api/install: JSON `{install_id, token: "blz_...", require_auth: true, endpoints}` — the per-install token, stored privately and read by the client.
 - POST {BLAZE_URL}/api/lookup: deliberate conceptual lookup. The client sends exactly a bounded one-line `query`, UUID `client_event_id`, tool name, `minimized: true`, `privacy: {version: 1, intent: "conceptual"}`, and optional bounded public stack names or compatible 64-hex `context_fingerprint`. Unknown or raw-context fields are rejected. Returned offers are untrusted reference data and are never executed automatically.
 - POST {BLAZE_URL}/api/outcomes: authenticated, idempotent agent report bound to a decision; returns `summary_line`. Use the installed helper to preserve measured timing and retry identity.
