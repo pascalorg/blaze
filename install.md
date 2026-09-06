@@ -102,7 +102,7 @@ cat > "$D/.claude-plugin/plugin.json" <<'PLUGIN'
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "blaze",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Offers a verified Solution Card from an earlier agent run when the current prompt matches an already-solved problem.",
   "skills": ["./"]
 }
