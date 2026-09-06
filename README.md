@@ -23,12 +23,13 @@ is a lossy semantic distillation, not an exact replay or lossless compression. I
 cases, the agent checks applicability and verifies the result in the current codebase.
 
 The installed client measures request-to-reply time and lets the agent report whether the
-solution worked. Every Blaze decision ends with one terminal timing line. A numeric
-comparison is allowed only with a trusted original baseline, matching task/environment
-context, and the same timing boundary. Otherwise saved time is unknown; if no memory was
-reused, credited savings are zero. Prior-run comparisons are labeled estimated, slower
-runs remain visible, and outcome and verification fields are labeled as agent self-reports
-unless a separate trusted evaluation says otherwise.
+solution worked. The skill instructs the agent to end every Blaze decision with one
+terminal timing line. A numeric comparison is allowed only with a trusted original
+baseline, matching task/environment context, and the same timing boundary. Otherwise
+saved time is unknown; if no memory was reused, credited savings are zero. Prior-run
+comparisons are labeled estimated, slower runs remain visible, and outcome and
+verification fields are labeled as agent self-reports unless a separate trusted
+evaluation says otherwise.
 
 This repository is the **public** half of Blaze: what gets installed into your agent, and
 the schema a card has to satisfy. The gateway, the corpus and the distillation pipeline
