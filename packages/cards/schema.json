@@ -92,7 +92,7 @@
         },
         "frameworks": {
           "type": "array",
-          "description": "Boosted at retrieval time when `name` intersects the stack detected from the caller's cwd.",
+          "description": "Boosted at retrieval time when `name` intersects optional public stack names deliberately supplied by the caller.",
           "minItems": 0,
           "maxItems": 8,
           "items": {
@@ -128,7 +128,7 @@
     },
     "procedure": {
       "type": "array",
-      "description": "Ordered steps, each classified by degrees of freedom. `exact` = reproduce verbatim, do not paraphrase. `templated` = keep the shape, substitute the names. `heuristic` = judgement call, adapt to the repo.",
+      "description": "Ordered reference steps classified by degrees of freedom. `exact` means the constraint was exact in the source verification, not that a receiving agent may execute it without review. `templated` means keep the shape and substitute names. `heuristic` means adapt with judgement.",
       "minItems": 2,
       "maxItems": 10,
       "items": {
