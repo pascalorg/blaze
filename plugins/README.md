@@ -3,21 +3,22 @@
 One directory per tool. The Codex forwarder and OpenCode module are byte-identical to
 the blocks [`../install.md`](../install.md) writes inline. Claude Code has a repository
 manifest and an install-time manifest for their different directory layouts; its hook
-events match, with the token stored privately at install time. Keep corresponding files in
+events match, with the origin-bound token stored with user-only permissions at install time. Keep corresponding files in
 sync. `bun run check:templates` checks these relationships.
 
 `{BLAZE_URL}` is a literal placeholder in installer/config templates. The gateway substitutes the
 origin the reader fetched from, so the same file is correct on localhost, on a preview
 deployment and in production. Never commit a hard-coded host in its place.
 
-Both events are best-effort in all three tools: a gateway that is down, slow or erroring
-returns nothing and the turn proceeds. Nothing Blaze installs can block a prompt.
+The installed hook is local-only: it ignores raw hook fields and returns fixed guidance
+for an explicit conceptual lookup. It never calls the gateway, and nothing Blaze installs
+can block a prompt.
 
 | Tool | Events | Transport |
 | --- | --- | --- |
-| Claude Code | `UserPromptSubmit`, `Stop` | `type: "command"` — shared Node timing client |
-| Codex CLI | `UserPromptSubmit`, `Stop` | `type: "command"` — Codex has no HTTP hook |
-| OpenCode | `chat.message`, `session.idle` | plugin module and the same shared client |
+| Claude Code | `UserPromptSubmit` | `type: "command"` — local reminder from the shared client |
+| Codex CLI | `UserPromptSubmit` | `type: "command"` — Codex has no HTTP hook |
+| OpenCode | `chat.message` | plugin module and the same local reminder |
 
 ## `claude-code/`
 
@@ -31,12 +32,12 @@ origin and writes the token and installed layout into `~/.claude/skills/blaze/`.
 skill so a fresh install works before the first gateway fetch. Keep them identical.
 
 Hooks bind at session start, so a fresh install is live next session; `/reload-plugins`
-loads it now. Neither `UserPromptSubmit` nor `Stop` supports `matcher`, so the key is
+loads it now. `UserPromptSubmit` does not support `matcher`, so the key is
 omitted (it would be silently ignored).
 
 ## `codex/`
 
-`hooks.json` carries the two entries to **merge** into `~/.codex/hooks.json` — that file is
+`hooks.json` carries the entry to **merge** into `~/.codex/hooks.json` — that file is
 usually already in use, so never overwrite it. `install.md` §3 does the merge idempotently
 with a short Python block.
 
@@ -48,7 +49,7 @@ the token from `~/.codex/blaze-token`, mode `600`. It always exits `0` and print
 any failure.
 
 Codex requires a **one-time trust confirmation per hook entry**: the user runs `/hooks` and
-approves the two `blaze-hook.sh` entries, recorded in `~/.codex/config.toml`. Until then the
+approves the `blaze-hook.sh` entry, recorded in `~/.codex/config.toml`. Until then the
 hooks are inert — expected, not a failed install.
 
 ## `opencode/`
@@ -61,13 +62,12 @@ The installer saves the full `skill.md` as
 `~/.config/opencode/skills/blaze/SKILL.md` and prints it for the installing agent
 to read.
 
-`chat.message` fires with the user's message before its parts are persisted, which is why
-pushing a synthetic text part splices the offer into that same turn. `session.idle` stands
-in for `Stop`.
+`chat.message` adds fixed local guidance to the turn. The plugin does not read, copy, or
+send the user's message, directory, session identifier, or other message parts.
 
 ## Authentication and fair use
 
-Every service call uses the existing private installation token, including lookup and
+Every service call uses the existing origin-bound installation token, including lookup and
 stats. Missing or malformed tokens stop the request locally. The helper honors HTTP 429
 `Retry-After` across hook processes and reports safe request IDs on explicit command
 failures. Keep event IDs stable when retrying; never mint another identity to bypass
@@ -78,19 +78,22 @@ contribution still needs independent verification.
 
 `client/blaze-client.mjs` is the shared source, copied byte-for-byte into the Claude
 plugin and downloaded next to the installed skill for each tool. It uses Node.js 20+
-built-ins only. Its config selects the hosted origin; tests use a local HTTP server.
+built-ins only. Its credential file binds the token to the hosted origin; tests use a
+local HTTP server.
 
 The client measures complete HTTP replies through JSON parsing, including card downloads
 performed through its `card` command. Receipts contain IDs and timing, never prompt/code
-contents, in private files under the skill's `receipts/` directory. `outcome` requires an
+contents, in user-only files under the skill's `receipts/` directory. `outcome` requires an
 explicit result and verification status; it retains the exact event and payload for a
-retry. A Stop event only closes the session. The skill asks the agent to copy the returned
-three-times summary at the end of its answer.
+retry. The skill asks the agent to copy the returned three-times summary at the end of
+its answer.
 
-The helper's `lookup` command also accepts explicit task/environment fingerprints and
-client event IDs. They are not inferred from keyword similarity. See the full skill for
-unknown-baseline behavior and the difference between an agent report and independent
-verification. Run `bun run test:client` for local-only transport/protocol tests.
+The helper's `lookup` command accepts an inspected, one-line conceptual problem, plus
+optional explicit task/environment fingerprints and client event IDs. It sends a strict
+`minimized: true` privacy contract and rejects raw-context fields, obvious credentials,
+paths, URLs, code-shaped input, and unknown fields. This validation is a guardrail rather
+than proof that text is safe. See the full skill for the human review boundary and timing
+rules. Run `bun run test:client` for local-only transport/protocol tests.
 
 ## Optional account and contributions
 
@@ -107,7 +110,7 @@ The same helper supports these explicit commands; no second skill or package is 
 Each command follows `node <installed-skill-directory>/blaze-client.mjs`. None runs
 automatically from a hook. Installation works without human signup; optional account
 pages are `/signup` and `/account` on the configured gateway. The helper uses the
-existing private installation token and never asks for a person's email.
+existing installation token and never asks for a person's email.
 
 See [`skill.md`](../skill.md#explicit-solution-contributions) for the exact contribution
 envelope and data boundaries. Private is the default. Public submission requires the

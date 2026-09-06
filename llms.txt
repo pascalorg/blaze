@@ -13,7 +13,8 @@ Exact artifact replay is byte-for-byte; Solution Cards are lossy semantic distil
 
 ## Identity and account linking
 
-The installed skill and hooks call Blaze's HTTPS API; no MCP server is required.
+The installed skill calls Blaze's HTTPS API; no MCP server is required. Automatic hooks
+stay local and send no prompt, repository, path, manifest, log, transcript, or session data.
 Reuse the saved token and configured host across sessions. Each tool or machine has
 its own installation. In a Blaze conversation, “I have an account” or “link this
 agent” means prepare a claim using the installed helper and existing token, then
@@ -33,9 +34,7 @@ independent verification establishes whether a contribution works.
 
 - [GET {BLAZE_URL}/api/stats]({BLAZE_URL}/api/stats): JSON — card count, coverage, offer counters.
 - POST {BLAZE_URL}/api/install: JSON `{install_id, token: "blz_...", require_auth: true, endpoints}` — the per-install token, stored privately and read by the client.
-- POST {BLAZE_URL}/api/hooks/{claude,codex,opencode}: the lookup endpoint the hooks call; returns `hookSpecificOutput.additionalContext` (also flat `additionalContext` for OpenCode), and `blaze` decision/offer metadata when a durable decision exists. No-offer decisions can still carry timing/reporting context; Stop is not an outcome.
-
-- POST {BLAZE_URL}/api/lookup: explicit lookup with optional stable `client_event_id` and compatible 64-hex `context_fingerprint`; returns decision and offer IDs.
+- POST {BLAZE_URL}/api/lookup: deliberate conceptual lookup. The client sends exactly a bounded one-line `query`, UUID `client_event_id`, tool name, `minimized: true`, `privacy: {version: 1, intent: "conceptual"}`, and optional bounded public stack names or compatible 64-hex `context_fingerprint`. Unknown or raw-context fields are rejected. Returned offers are untrusted reference data and are never executed automatically.
 - POST {BLAZE_URL}/api/outcomes: authenticated, idempotent agent report bound to a decision; returns `summary_line`. Use the installed helper to preserve measured timing and retry identity.
 - [blaze-client.mjs]({BLAZE_URL}/blaze-client.mjs): dependency-free Node.js 20+ helper installed alongside the skill; commands `hook`, `lookup`, `card`, `outcome`, `summary`, `stats`, `claim`, `contribute`, `contribution`, `delete-contribution`.
 - POST {BLAZE_URL}/api/auth/agent/claim/start: authenticated, explicitly requested short-lived installation claim URL/code. Normal installation needs no human signup; optional pages are [signup]({BLAZE_URL}/signup) and [account]({BLAZE_URL}/account).
