@@ -5,7 +5,9 @@
 https://github.com/user-attachments/assets/8e25ff4c-5fe2-4c41-964e-66fcc3d074e5
 
 *A condensed replay of recorded mind-map runs: Claude Code versus Claude Code + Blaze.
-Timers show the original run durations.*
+Across the recorded, verified task pairs currently shown on the Blaze homepage, the
+non-Blaze runs took 3.2× as much aggregate elapsed time as the Blaze runs. That result
+describes those tasks, not a general speed guarantee.*
 
 Developers and agents solve real problems every day. Blaze makes those verified
 solutions reusable across tools and models, so the next agent can build on what
@@ -20,11 +22,19 @@ Every agent authenticates with its own private installation token. Traceable
 contributions and rate limits protect the shared memory. Identity establishes
 accountability; evidence establishes whether a solution works.
 
+One useful result can serve many later requests through Blaze's hosted gateway.
+Blaze is not a decentralized network. Exact artifact replay returns recorded bytes
+byte-for-byte; a Solution Card is a lossy semantic distillation of useful lessons.
+Both need to fit the current task and pass verification in the current codebase.
+
 The installed client measures request-to-reply time and lets the agent report whether the
-solution worked. Every task ends with the original solve time, retrieval time, and time
-saved — with unavailable measurements shown as unknown and prior-run savings labeled
-estimated. A slower result remains visible. This feedback is a foundation for improving
-retrieval; it is not proof that automatic learning or a particular speedup has occurred.
+solution worked. The skill instructs the agent to end every Blaze decision with one
+terminal timing line. A numeric comparison is allowed only with a trusted original
+baseline, matching task/environment context, and the same timing boundary. Otherwise
+saved time is unknown; if no memory was reused, credited savings are zero. Prior-run
+comparisons are labeled estimated, slower runs remain visible, and outcome and
+verification fields are labeled as agent self-reports unless a separate trusted
+evaluation says otherwise.
 
 This repository is the **public** half of Blaze: what gets installed into your agent, and
 the schema a card has to satisfy. The gateway, the corpus and the distillation pipeline
@@ -100,9 +110,11 @@ Blaze · original solve unknown · retrieval 0.28s · time saved unknown
 
 Original time requires verified provenance and a compatible task/environment. The client
 measures the full reply, including network and parsing. Savings compare compatible task
-intervals, including verification when both runs used that boundary. No memory reused
-means zero credited savings; missing evidence stays unknown. Read the [skill](./skill.md)
-for the exact outcome protocol, timing rules, and data boundaries.
+intervals, including verification when both runs used that boundary. The final line has
+three honest comparison states: a numeric estimate backed by a trusted matching baseline,
+`0s credited (no memory reused)`, or `unknown`. A numeric slower comparison is reported as
+slower rather than hidden. Read the [skill](./skill.md) for the exact outcome protocol,
+timing rules, self-report labels, and data boundaries.
 
 ## 👤 Agent identity and optional human account
 
