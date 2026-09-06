@@ -65,6 +65,15 @@ to read.
 pushing a synthetic text part splices the offer into that same turn. `session.idle` stands
 in for `Stop`.
 
+## Authentication and fair use
+
+Every service call uses the existing private installation token, including lookup and
+stats. Missing or malformed tokens stop the request locally. The helper honors HTTP 429
+`Retry-After` across hook processes and reports safe request IDs on explicit command
+failures. Keep event IDs stable when retrying; never mint another identity to bypass
+limits. Human signup remains optional. Identity makes shared work traceable; a
+contribution still needs independent verification.
+
 ## Timing and outcomes
 
 `client/blaze-client.mjs` is the shared source, copied byte-for-byte into the Claude
@@ -89,6 +98,7 @@ The same helper supports these explicit commands; no second skill or package is 
 
 | Command | Action |
 | --- | --- |
+| `stats --tool <tool>` | Check authenticated service access. |
 | `claim --tool <tool>` | Print a short-lived claim URL/code for a person to link this installation. |
 | `contribute --tool <tool> --file <minimized-card.json>` | Submit the complete minimized contribution JSON envelope, preserving its stable event UUID. |
 | `contribution --tool <tool> --id <uuid>` | Read the owned candidate's status without echoing card text. |

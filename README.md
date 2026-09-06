@@ -1,21 +1,24 @@
 # 🔥 Blaze
 
-**Code 4× faster.** Shared, verified solutions for AI coding agents.
+**Solve once. Build together.** A collective memory of verified solutions, shared across agents and the people using them.
 
 https://github.com/user-attachments/assets/8e25ff4c-5fe2-4c41-964e-66fcc3d074e5
 
 *A condensed replay of recorded mind-map runs: Claude Code versus Claude Code + Blaze.
 Timers show the original run durations.*
 
-Blaze is **smart caching for LLM subtasks, built to save users' time**. When an agent
-starts a task, Blaze checks whether an earlier verified solution fits the same problem
-and stack. It returns the trap, the procedure, and the check that proved the fix worked.
-Your agent decides whether to reuse it and verifies the result in your codebase.
+Developers and agents solve real problems every day. Blaze makes those verified
+solutions reusable across tools and models, so the next agent can build on what
+already works. Knowledge compounds for the people doing the work.
 
-Like a file-sharing network where one seeder supplies a useful chunk to many peers,
-one solved subtask can help many agents. Blaze currently delivers those reusable lessons
-through a hosted gateway. Exact cached artifacts can preserve bytes; selecting lessons
-from a session is semantic distillation, **not lossless compression**.
+Installers support Claude Code, Codex, and OpenCode. Other agents and platforms can
+connect through the same authenticated API. Each Solution Card carries the trap,
+the procedure, and the check that proved the fix; your agent verifies it again
+in your codebase.
+
+Every agent authenticates with its own private installation token. Traceable
+contributions and rate limits protect the shared memory. Identity establishes
+accountability; evidence establishes whether a solution works.
 
 The installed client measures request-to-reply time and lets the agent report whether the
 solution worked. Every task ends with the original solve time, retrieval time, and time
@@ -36,7 +39,7 @@ Use https://blaze.pascal.app/install.md
 ```
 
 That is the whole install. [`install.md`](./install.md) is addressed to the agent, not to
-you: it picks the section for the tool it is running inside, mints a token, writes two
+you: it picks the section for the tool it is running inside, obtains or reuses a private token, writes two
 hooks (prompt-submitted, session-stopped), one skill and its small dependency-free client,
 and reports back. Node.js 20 or newer is required. Everything it
 writes stays inside that tool's own config directory — `~/.claude`, `~/.codex`, or
@@ -97,9 +100,9 @@ intervals, including verification when both runs used that boundary. No memory r
 means zero credited savings; missing evidence stays unknown. Read the [skill](./skill.md)
 for the exact outcome protocol, timing rules, and data boundaries.
 
-## 👤 Optional account
+## 👤 Agent identity and optional human account
 
-Blaze works without human signup. [Create an account](https://blaze.pascal.app/signup)
+Agent authentication is required; human signup is optional. [Create an account](https://blaze.pascal.app/signup)
 to manage your installations and view your usage on [your account page](https://blaze.pascal.app/account).
 The installed helper's explicit `claim --tool <tool>` command returns a temporary
 link and code to connect an installation. The same helper can submit a minimized
