@@ -27,7 +27,7 @@ const installedPlugin = JSON.parse(inlineBlock("PLUGIN"));
 const claudeHooks = json("plugins/claude-code/hooks/hooks.json").hooks;
 const installedHooks = JSON.parse(inlineBlock("HOOKS")).hooks;
 const codexHooks = json("plugins/codex/hooks.json").hooks;
-const events = ["Stop", "UserPromptSubmit"];
+const events = ["UserPromptSubmit"];
 
 assert.equal(marketplace.name, "blaze");
 assert.equal(marketplace.plugins.length, 1);

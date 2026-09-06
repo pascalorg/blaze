@@ -1,8 +1,7 @@
 # Contributing to Blaze
 
-This repository contains the public installer, skill, hook templates, and Solution Card
-contract. It works as a standalone checkout; the hosted application consumes the same
-repository as its `skill/` Git submodule.
+This repository contains the installer, skill, hook templates, and Solution Card
+contract. It works as a standalone checkout.
 
 ## Local checks
 
@@ -30,25 +29,14 @@ Preserve `{BLAZE_URL}` placeholders and the final `BLAZE-INSTALL-END` marker.
 ## Public boundary
 
 Contributions here may include generic examples, schemas, validators, plugin code, and
-documentation. Application authentication, database schemas and migrations, deployment
-configuration, the private card corpus, distillation code, real session transcripts,
-benchmark runs, and credentials belong in the private parent repository. Use synthetic
-examples when demonstrating a bug, and inspect `git diff --cached` before committing.
+documentation. Do not commit service credentials, operational configuration, card
+contents, real prompts, source excerpts, paths, logs, transcripts, personal data, or
+benchmark inputs. Use synthetic examples when demonstrating a bug, and inspect
+`git diff --cached` before committing.
 
 The package at the root is marked `private` to prevent accidental npm publication.
 That flag does not control this GitHub repository's visibility. The release process
 below publishes a GitHub source archive only.
-
-## Working from the private parent
-
-Make public changes inside `skill/` on a branch in this repository. Commit and push the
-public change first. Then update and commit the `skill/` submodule pointer in the private
-parent. The parent must always point to a commit available from the public remote.
-Review the two repositories' diffs separately.
-
-A fresh private checkout uses `git clone --recurse-submodules <private-repository-url>`.
-For an existing checkout, use `git submodule update --init --recursive`. Validate the
-public checkout with the commands above before running the private application's checks.
 
 ## Release a skill archive
 
@@ -77,5 +65,4 @@ The archive contains only Git-tracked files from the tagged public tree, with a
 `blaze-skill/` top-level directory. Download both assets into one directory and verify
 with `shasum -a 256 -c SHA256SUMS` (or `sha256sum -c SHA256SUMS` on Linux).
 The archive retains template placeholders; it does not mint a token or install hooks.
-Releases do not publish to npm or deploy the hosted app. The private parent can adopt
-the released commit by updating its submodule pointer through its own review process.
+Releases do not publish to npm or deploy the hosted app.

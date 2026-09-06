@@ -22,7 +22,7 @@ export const TOKEN_BUDGET_MAX = 1200;
 /**
  * Replay cards (`"replay": true`) carry whole files rather than one variabilized
  * fragment, so the distilled budget does not apply to them. They are still
- * bounded: an offer has to fit in a hook payload alongside the user's prompt.
+ * bounded: an offer has to fit in a client response and remain practical to review.
  */
 export const REPLAY_TOKEN_BUDGET_MAX = 6000;
 // A distilled card is an exemplar, not a patch set: at most three snippets. Replay cards
@@ -136,7 +136,7 @@ export function validateAgainstSchema(value: unknown, schema: Schema, path = "$"
 
 /** Rendered once per card instead of once per step, to save body budget. */
 const FREEDOM_LEGEND =
-  "(exact = reproduce verbatim · templated = keep the shape, swap the names · heuristic = judgement call)";
+  "(exact = preserve the verified constraint after review · templated = keep the shape, swap the names · heuristic = judgement call)";
 
 /**
  * Canonical Skill-shaped rendering of a card body: pitfalls first, then procedure,

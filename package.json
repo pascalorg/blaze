@@ -1,7 +1,7 @@
 {
   "name": "blaze-skill",
   "private": true,
-  "description": "The public half of Blaze: the install instructions, the skill, the per-tool plugins, and the Solution Card schema.",
+  "description": "Blaze install instructions, agent skill, per-tool plugins, and Solution Card schema.",
   "license": "MIT",
   "packageManager": "bun@1.4.0",
   "repository": {
@@ -13,6 +13,8 @@
   ],
   "scripts": {
     "check": "bun run validate && bun run typecheck && bun run check:templates && bun run test:client",
+    "test": "bun run test:client",
+    "build": "bun run check:templates",
     "test:client": "node --test plugins/client/blaze-client.test.mjs",
     "check:templates": "bun scripts/check-templates.ts",
     "validate": "bun run --cwd packages/cards validate",
