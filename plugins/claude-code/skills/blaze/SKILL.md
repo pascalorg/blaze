@@ -1,21 +1,14 @@
 ---
 name: blaze
-description: Smart caching for coding subtasks. Use when Blaze is installed, a Blaze receipt or offer appears, or the user asks about Blaze. Check applicability, report explicit outcomes, and finish with the measured three-times summary.
+description: Collective memory of verified coding solutions. Use when Blaze is installed, a Blaze receipt or offer appears, or the user asks about Blaze. Check applicability, report explicit outcomes, and finish with the measured three-times summary.
 ---
 
 # Blaze
 
-Blaze is **smart caching for LLM subtasks, built to save users' time**. Instead of
-solving the same problem from scratch, an agent can reuse the useful parts of an
-earlier verified solution: the trap, the procedure, and the check that proved it.
-
-Think of a file-sharing network: one seeder has a useful chunk, and many people can
-reuse it. Blaze applies that idea to solved subtasks, delivered through a hosted
-gateway. The analogy is shared work, not a claim that Blaze runs BitTorrent.
-
-Exact artifact caching can preserve bytes. Distilling a session into a Solution Card
-selects useful lessons and is **not lossless compression**. A card still needs to fit
-the current task and pass verification here.
+**Solve once. Build together.** Blaze is a collective memory of verified solutions,
+shared across agents, models, and the people using them. Reuse the trap, procedure,
+and verification from earlier work, then verify the result in the current codebase.
+A Solution Card is a distilled lesson; it does not preserve an entire session.
 
 The installed client checks prompts with the hosted gateway and measures the complete
 request/reply, including transfer and JSON parsing. Matching cards arrive as context;
@@ -172,9 +165,29 @@ If no receipt exists, use:
 Blaze · original solve unknown · retrieval unknown · time saved unknown
 ```
 
+## Authentication and fair use
+
+Every service request requires the installation's private bearer token, including
+lookups, hooks, cards, and stats. The installer obtains it automatically; human signup
+is optional. Authentication makes contributions traceable, and rate limits protect the
+shared memory. An authenticated agent is accountable for its requests; its identity
+does not prove a solution correct.
+
+Use the installed helper so tokens stay out of prompts and command output. On HTTP 401,
+repair or replace the token deliberately; never fall back to anonymous requests. On
+HTTP 429, respect `Retry-After` and preserve the same installation and event IDs. The
+helper remembers the cooldown across hook processes. Do not create installations or
+rotate network addresses to evade limits. Hooks let the coding task continue when
+Blaze is unavailable; they do not obtain memory without authentication.
+
+Explicit helper commands report HTTP failures with a safe `X-Blaze-Request-Id` when
+available. Include that ID when reporting a failure, never the token or private prompt.
+Security records correlate identities, operations, and outcomes without retaining raw
+IP addresses, bearer tokens, or prompt text in the security log.
+
 ## Optional account and installation claim
 
-A normal Blaze installation works without human signup. If the user wants to manage
+An authenticated Blaze installation works without human signup. If the user wants to manage
 their installations and view their own usage, they can create an account at
 `https://blaze.pascal.app/signup` and use `https://blaze.pascal.app/account`.
 For another deployment, use its `/signup` and `/account` pages.

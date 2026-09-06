@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TOKEN = /^blz_[A-Za-z0-9_-]{43}$/;
 const RESULTS = new Set(["solved_as_is", "solved_with_changes", "solved_without_memory", "failed", "not_tried", "unknown"]);
 const VERIFICATIONS = new Set(["passed", "failed", "not_run", "unknown"]);
 const BOUNDARIES = new Set(["task_start_to_agent_end", "task_start_to_verification_end"]);
@@ -66,16 +67,47 @@ export function createClient({ origin, token = "", stateDir, tool, helperPath = 
     return value;
   };
   async function request(path, body, method = body === undefined ? "GET" : "POST") {
+    if (!TOKEN.test(token)) throw new Error("Blaze needs a valid private installation token. Complete the installer before using the service.");
+    const cooldownPath = join(stateDir, "rate-limit.json");
+    const cooldown = load(cooldownPath);
+    if (cooldown?.origin === base && Number.isFinite(cooldown.until) && cooldown.until > Date.now()) {
+      throw new Error(`Blaze is rate limited. Retry in ${Math.ceil((cooldown.until - Date.now()) / 1000)}s; keep the same installation and event IDs.`);
+    }
     const start = performance.now();
     const response = await fetchImpl(`${base}${path}`, {
       method,
-      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(4500), redirect: "error",
     });
-    const data = await response.json();
+    const rawId = response.headers.get("x-blaze-request-id");
+    const requestId = UUID.test(rawId ?? "") ? rawId : null;
+    if (!response.ok) {
+      // Error bodies are untrusted and may contain secrets or proxy HTML. Never echo them.
+      await response.body?.cancel();
+      let message = `Blaze request failed (HTTP ${response.status}).`;
+      if (response.status === 401) message += " Repair or replace this installation's token; do not retry anonymously.";
+      if (response.status === 429) {
+        const header = response.headers.get("retry-after");
+        const seconds = /^\d+$/.test(header ?? "") ? Number(header) : (Date.parse(header ?? "") - Date.now()) / 1000;
+        const retryAfter = Number.isFinite(seconds) && seconds > 0 ? Math.min(Math.ceil(seconds), 86_400) : 60;
+        mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+        const until = Date.now() + retryAfter * 1000;
+        const previous = load(cooldownPath);
+        // Another in-flight operation may already have received a longer delay.
+        // This file is advisory; the server's durable quotas remain authoritative.
+        if (previous?.origin !== base || !Number.isFinite(previous.until) || previous.until < until) {
+          save(cooldownPath, { origin: base, until, request_id: requestId });
+        }
+        message += ` Retry in ${retryAfter}s; keep the same installation and event IDs.`;
+      }
+      if (requestId) message += ` Request: ${requestId}.`;
+      throw new Error(message);
+    }
+    const data = await response.json().catch(() => {
+      throw new Error(`Blaze returned invalid JSON (HTTP ${response.status}).${requestId ? ` Request: ${requestId}.` : ""}`);
+    });
     const elapsed = performance.now() - start; // Includes headers, body transfer and JSON parsing.
-    if (!response.ok) throw new Error(`Blaze request failed (HTTP ${response.status})`);
     return { data, elapsed };
   }
   function context(response, saved, event) {
@@ -123,6 +155,11 @@ export function createClient({ origin, token = "", stateDir, tool, helperPath = 
     return context(data, saved, event);
   }
   return {
+    async stats() {
+      const { data } = await request("/api/stats");
+      if (!Number.isSafeInteger(data?.cards) || data.cards < 0) throw new Error("Blaze returned invalid service stats.");
+      return { cards: data.cards };
+    },
     async claim() {
       if (!token) throw new Error("A private installation token is required to claim this installation");
       const { data } = await request("/api/auth/agent/claim/start", {});
@@ -211,7 +248,7 @@ export function createClientForTool(tool) {
   const paths = toolPaths(tool);
   const config = load(join(paths.root, "client-config.json"));
   let token = "";
-  try { token = readFileSync(paths.token, "utf8").trim(); } catch { /* Optional for lookup, required for outcome. */ }
+  try { token = readFileSync(paths.token, "utf8").trim(); } catch { /* Network requests fail closed; offline summaries still work. */ }
   return createClient({ origin: config?.origin ?? "https://blaze.pascal.app", token, tool, stateDir: join(paths.root, "receipts") });
 }
 
@@ -239,11 +276,12 @@ async function main(argv) {
     console.log(result.summary_line);
   } else if (command === "card") console.log(JSON.stringify(await client.card(args.decision, args.card)));
   else if (command === "summary") console.log(client.summary(args.decision));
+  else if (command === "stats") console.log(JSON.stringify(await client.stats()));
   else if (command === "claim") console.log(JSON.stringify(await client.claim()));
   else if (command === "contribute") console.log(JSON.stringify(await client.contribute(readContributionFile(args.file))));
   else if (command === "contribution") console.log(JSON.stringify(await client.contribution(args.id)));
   else if (command === "delete-contribution") console.log(JSON.stringify(await client.deleteContribution(args.id)));
-  else throw new Error("Expected hook, lookup, card, outcome, summary, claim, contribute, contribution, or delete-contribution");
+  else throw new Error("Expected hook, lookup, card, outcome, summary, stats, claim, contribute, contribution, or delete-contribution");
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {

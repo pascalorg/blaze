@@ -23,6 +23,11 @@ async function fixture(t, options = {}) {
     const body = raw ? JSON.parse(raw) : null;
     requests.push({ path: req.url, method: req.method, body, authorization: req.headers.authorization });
     res.setHeader("content-type", "application/json");
+    if (req.url === "/api/install") {
+      if (options.rejectBootstrap) {res.statusCode=429;res.setHeader("Retry-After","600");res.end("SYNTHETIC_SECRET");return;}
+      res.end(JSON.stringify({token:"blz_"+"A".repeat(43),require_auth:true}));return;
+    }
+    if (req.url === "/api/stats") { res.end('{"cards":2}'); return; }
     if (req.url === "/api/auth/agent/claim/start") {
       res.end(JSON.stringify({claimUrl:"https://example.invalid/claim",claimCode:"ABCD-EFGH",expiresAt:"2099-01-01T00:00:00Z",token:"must-not-be-printed"}));
       return;
@@ -76,7 +81,7 @@ async function fixture(t, options = {}) {
     rmSync(stateDir, { recursive: true, force: true });
   });
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const client = createClient({ origin, tool: "codex", token: "synthetic-test-token", stateDir });
+  const client = createClient({ origin, tool: "codex", token: "blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", stateDir });
   return { client, stateDir, requests, origin };
 }
 
@@ -86,7 +91,7 @@ test("full reply timing, private receipts, explicit fingerprint and stable looku
   const response = await client.hook(body);
   assert.ok(response.blaze.retrieval_ms >= 30);
   assert.match(response.hookSpecificOutput.additionalContext, /Before the final answer/);
-  assert.equal(requests[0].authorization, "Bearer synthetic-test-token");
+  assert.equal(requests[0].authorization, "Bearer blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   assert.equal(requests[0].body.context_fingerprint, "a".repeat(64));
   const path = join(stateDir, `${response.blaze.decision_id}.json`);
   const first = JSON.parse(readFileSync(path, "utf8"));
@@ -167,7 +172,7 @@ test("claim is explicit and returns only the short-lived link, code, and expiry"
   const challenge = await client.claim();
   assert.deepEqual(challenge,{claimUrl:"https://example.invalid/claim",claimCode:"ABCD-EFGH",expiresAt:"2099-01-01T00:00:00Z"});
   assert.equal(requests.at(-1).method,"POST");
-  assert.equal(requests.at(-1).authorization,"Bearer synthetic-test-token");
+  assert.equal(requests.at(-1).authorization,"Bearer blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   assert.deepEqual(requests.at(-1).body,{});
   assert.deepEqual(readdirSync(stateDir),[]);
 });
@@ -229,7 +234,7 @@ test("receipt traversal, foreign offers and invalid result values are rejected l
 });
 
 test("older servers receive an honest fallback rather than a fabricated decision", async () => {
-  const client = createClient({ origin: "https://example.invalid", tool: "codex", stateDir: "/unused",
+  const client = createClient({ origin: "https://example.invalid", tool: "codex", token: "blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", stateDir: "/unused",
     fetchImpl: async () => Response.json({ offered: false }) });
   const response = await client.hook({ prompt: "new task" });
   assert.match(response.additionalContext, /original solve unknown/);
@@ -248,7 +253,7 @@ test("installed CLI preserves a receipt across processes and OpenCode consumes f
     mkdirSync(join(home, tokenPath, ".."), { recursive: true });
     copyFileSync(source, join(home, directory, "blaze-client.mjs"));
     writeFileSync(join(home, directory, "client-config.json"), JSON.stringify({ origin }));
-    writeFileSync(join(home, tokenPath), "synthetic-test-token");
+    writeFileSync(join(home, tokenPath), "blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   }
   const run = promisify(execFile);
   const helper = join(home, ".agents/skills/blaze/blaze-client.mjs");
@@ -273,6 +278,7 @@ test("installed CLI preserves a receipt across processes and OpenCode consumes f
   assert.equal(requests.at(-1).body.client_event_id, "opencode:message-1");
 
   const cli = (command, ...args) => run(process.execPath,[helper,command,"--tool","codex",...args],{env:{...process.env,HOME:home}});
+  assert.deepEqual(JSON.parse((await cli("stats")).stdout), {cards: 2});
   const claim = await cli("claim");
   assert.equal(JSON.parse(claim.stdout).claimCode,"ABCD-EFGH");
   assert.equal(claim.stdout.includes("must-not-be-printed"),false);
@@ -299,7 +305,7 @@ test("Claude settings fallback preserves existing configuration and runs without
   copyFileSync(fileURLToPath(new URL("blaze-client.mjs",import.meta.url)),join(root,"blaze-client.mjs"));
   writeFileSync(join(root,"hooks/hooks.json"),JSON.stringify(pluginHooks));
   writeFileSync(join(root,"client-config.json"),JSON.stringify({origin}));
-  writeFileSync(join(root,"token"),"synthetic-test-token");
+  writeFileSync(join(root,"token"),"blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
   writeFileSync(join(root,"SKILL.md"),"Full skill fixture remains in place.\n");
   const keep={type:"command",command:"echo unrelated-hook",timeout:10};
   const initial={permissions:{allow:["Read"]},env:{KEEP_SETTING:"synthetic-value"},hooks:{
@@ -333,4 +339,116 @@ test("Claude settings fallback preserves existing configuration and runs without
     if(event==="UserPromptSubmit")assert.match(output.hookSpecificOutput.additionalContext,/0s credited/);
     else assert.deepEqual(output,{});
   }
+});
+
+
+test("all service requests require a real-shaped token before making a network call", async (t) => {
+  const {origin, stateDir} = await fixture(t);
+  let sent = 0;
+  for (const token of ["", "not-a-token", "blz_" + "A".repeat(42), "blz_" + "A".repeat(43) + " extra"]) {
+    const client = createClient({origin, tool:"codex", token, stateDir, fetchImpl: async () => { sent++; throw Error("unexpected request"); }});
+    await assert.rejects(client.lookup({query:"private task"}), /private installation token/);
+    await assert.rejects(client.hook({hook_event_name:"Stop"}), /private installation token/);
+    await assert.rejects(client.stats(), /private installation token/);
+  }
+  assert.equal(sent, 0);
+});
+
+test("rate limits survive new client processes and never resend or mint another identity", async (t) => {
+  const {origin, stateDir} = await fixture(t);
+  const requestId = randomUUID();
+  let sent = 0;
+  const options = {origin, stateDir, tool:"codex", token:"blz_" + "A".repeat(43), fetchImpl: async () => {
+    sent++;
+    return new Response("SYNTHETIC_SECRET", {status:429, headers:{"retry-after":"120", "x-blaze-request-id":requestId}});
+  }};
+  await assert.rejects(createClient(options).stats(), (error) => {
+    assert.match(error.message, /HTTP 429.*Retry in 120s/);
+    assert.ok(error.message.includes(requestId));
+    assert.ok(!error.message.includes("SYNTHETIC_SECRET"));
+    return true;
+  });
+  await assert.rejects(createClient(options).lookup({query:"private task"}), /keep the same installation and event IDs/);
+  assert.equal(sent, 1);
+  const path=join(stateDir,"rate-limit.json");
+  const saved=JSON.parse(readFileSync(path,"utf8"));
+  assert.equal(saved.request_id,requestId);
+  assert.equal(statSync(path).mode & 0o077,0);
+  assert.ok(!readFileSync(path,"utf8").includes(options.token));
+  writeFileSync(path,JSON.stringify({...saved,until:Date.now()-1}));
+  await assert.rejects(createClient(options).stats(), /HTTP 429/);
+  assert.equal(sent,2);
+});
+
+test("HTTP-date Retry-After works and untrusted error text cannot enter diagnostics", async (t) => {
+  const {origin, stateDir} = await fixture(t);
+  const options={origin,stateDir,tool:"codex",token:"blz_"+"A".repeat(43)};
+  const client=createClient({...options,fetchImpl:async () => new Response("secret body",{status:429,headers:{
+    "retry-after":new Date(Date.now()+120_000).toUTCString(),"x-blaze-request-id":"untrusted-secret-value",
+  }})});
+  await assert.rejects(client.stats(), /HTTP 429.*Retry in 1[12][0-9]s/);
+  assert.equal(JSON.parse(readFileSync(join(stateDir,"rate-limit.json"),"utf8")).request_id,null);
+  rmSync(join(stateDir,"rate-limit.json"));
+  await assert.rejects(createClient({...options,fetchImpl:async () => new Response("private debug detail",{status:401})}).stats(),
+    (error) => /HTTP 401.*do not retry anonymously/.test(error.message) && !error.message.includes("private debug detail"));
+});
+
+
+test("installer reuses its matching-origin identity and refuses malformed or foreign credentials", async (t) => {
+  const {origin,stateDir,requests}=await fixture(t);
+  const home=join(stateDir,"installer home");
+  const root=join(home,".agents/skills/blaze");
+  mkdirSync(root,{recursive:true});mkdirSync(join(home,".codex"),{recursive:true});
+  const installer=readFileSync(fileURLToPath(new URL("../../install.md",import.meta.url)),"utf8");
+  const script=installer.match(/<<'TOKEN'\n([\s\S]*?)\nTOKEN\n/)[1].replaceAll("{BLAZE_URL}",origin);
+  const run=promisify(execFile);
+  const bootstrap=() => {
+    const pending=run(process.execPath,["--input-type=module","-","codex"],{env:{...process.env,HOME:home}});
+    pending.child.stdin.end(script);return pending;
+  };
+  const first=await bootstrap();
+  assert.equal(first.stdout,"blz_"+"A".repeat(43));
+  assert.equal(first.stderr,"");
+  assert.deepEqual(requests[0].body,{tool:"codex"});
+  writeFileSync(join(home,".codex/blaze-token"),first.stdout);
+  writeFileSync(join(root,"client-config.json"),JSON.stringify({origin}));
+  assert.equal((await bootstrap()).stdout,first.stdout);
+  assert.equal(requests.length,1);
+  writeFileSync(join(root,"client-config.json"),JSON.stringify({origin:"https://another.example.invalid"}));
+  await assert.rejects(bootstrap(),error => error.stdout==="" && /different Blaze origin/.test(error.stderr));
+  writeFileSync(join(root,"client-config.json"),JSON.stringify({origin}));
+  writeFileSync(join(home,".codex/blaze-token"),"malformed-private-value");
+  await assert.rejects(bootstrap(),error => error.stdout==="" && /valid installation token/.test(error.stderr) && !error.stderr.includes("malformed-private-value"));
+  assert.equal(requests.length,1);
+});
+
+test("installer stops on bootstrap limits without leaking response bodies or retrying", async (t) => {
+  const {origin,stateDir,requests}=await fixture(t,{rejectBootstrap:true});
+  const installer=readFileSync(fileURLToPath(new URL("../../install.md",import.meta.url)),"utf8");
+  const script=installer.match(/<<'TOKEN'\n([\s\S]*?)\nTOKEN\n/)[1].replaceAll("{BLAZE_URL}",origin);
+  const run=promisify(execFile);
+  const pending=run(process.execPath,["--input-type=module","-","codex"],{env:{...process.env,HOME:join(stateDir,"fresh-home")}});
+  pending.child.stdin.end(script);
+  await assert.rejects(pending,error => error.stdout==="" && /HTTP 429.*Retry after 600s/.test(error.stderr) && !error.stderr.includes("SYNTHETIC_SECRET"));
+  assert.equal(requests.length,1);
+});
+
+
+test("malformed successful JSON never leaks response excerpts into diagnostics", async (t) => {
+  const {origin,stateDir}=await fixture(t);
+  const client=createClient({origin,stateDir,tool:"codex",token:"blz_"+"A".repeat(43),fetchImpl:async () => new Response("SYNTHETIC_PRIVATE_TOKEN",{status:200})});
+  await assert.rejects(client.stats(),error => /invalid JSON/.test(error.message) && !error.message.includes("SYNTHETIC"));
+});
+
+
+test("a later in-flight 429 does not shorten a longer observed cooldown", async (t) => {
+  const {origin,stateDir}=await fixture(t);
+  const pending=[];
+  const client=createClient({origin,stateDir,tool:"codex",token:"blz_"+"A".repeat(43),fetchImpl:() => new Promise(resolve=>pending.push(resolve))});
+  const long=assert.rejects(client.stats(),/HTTP 429/);
+  const short=assert.rejects(client.stats(),/HTTP 429/);
+  pending[0](new Response("",{status:429,headers:{"retry-after":"3600"}}));await long;
+  const until=JSON.parse(readFileSync(join(stateDir,"rate-limit.json"),"utf8")).until;
+  pending[1](new Response("",{status:429,headers:{"retry-after":"60"}}));await short;
+  assert.equal(JSON.parse(readFileSync(join(stateDir,"rate-limit.json"),"utf8")).until,until);
 });
