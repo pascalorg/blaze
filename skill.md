@@ -9,13 +9,14 @@ Blaze is **smart caching for LLM subtasks, built to save users' time**. Instead 
 solving the same problem from scratch, an agent can reuse the useful parts of an
 earlier verified solution: the trap, the procedure, and the check that proved it.
 
-Think of a file-sharing network: one seeder has a useful chunk, and many people can
-reuse it. Blaze applies that idea to solved subtasks, delivered through a hosted
-gateway. The analogy is shared work, not a claim that Blaze runs BitTorrent.
+Think of peer-to-peer distribution: one useful result can serve many later requests.
+The analogy is limited to reuse. Blaze currently delivers results through a hosted
+gateway; it is not a decentralized network or a BitTorrent implementation.
 
-Exact artifact caching can preserve bytes. Distilling a session into a Solution Card
-selects useful lessons and is **not lossless compression**. A card still needs to fit
-the current task and pass verification here.
+Exact artifact replay returns the recorded artifact bytes byte-for-byte. Distilling a
+session into a Solution Card selects useful lessons and is a lossy semantic process,
+not exact replay or lossless compression. Either form still needs to fit the current
+task and pass verification here.
 
 The installed client checks prompts with the hosted gateway and measures the complete
 request/reply, including transfer and JSON parsing. Matching cards arrive as context;
@@ -90,8 +91,10 @@ would treat a StackOverflow answer that a colleague vouched for.
    `Verify` command is a hint about *what kind* of check is meaningful; adapt it to
    the local test runner and paths.
 6. **Say when you used it.** Mention briefly which pitfall or step you took from
-   the card, and say so plainly if you decided it did not apply. Submit the explicit outcome below. A self-report is evidence to evaluate,
-   not an automatic promotion or demotion of a card.
+   the card, and say so plainly if you decided it did not apply. Submit the explicit
+   outcome below. Label result and verification as agent self-reports unless a separate
+   trusted evaluation established them. A self-report is evidence to evaluate, not an
+   automatic promotion or demotion of a card.
 
 ## Do not
 
@@ -136,7 +139,16 @@ The command injected with the receipt already has the correct path, tool and UUI
   interval, `--task-total-ms <milliseconds>` can supply it. Never guess this number.
 
 The helper prints the server's `summary_line`. **Copy it exactly as the final line of
-your answer**, even if nothing matched or no savings can be estimated. For example:
+your answer**, even if nothing matched or no savings can be estimated. The comparison
+portion has exactly three honest states:
+
+1. A numeric estimate, only when a trusted original baseline, matching task/environment
+   context, and the same timing boundary are present. If the replay took longer, report
+   the numeric result as slower.
+2. `0s credited (no memory reused)` when no offered memory was adopted.
+3. `unknown` when the trusted baseline or matching context is absent.
+
+For example:
 
 ```text
 Blaze · original solve unknown · retrieval 0.28s · time saved unknown
@@ -145,7 +157,9 @@ Blaze · original solve unknown · retrieval 0.28s · time saved 0s credited (no
 
 A numeric original duration requires a recorded, verified source run and an explicit
 matching task/environment fingerprint and timing boundary. A prior-run comparison is
-always labeled **estimated**. A slower run stays visible as “slower.” Retrieval is
+always labeled **estimated**. A slower run stays visible as “slower.” Categorical result
+and verification status are **agent self-reports** unless the response separately names
+a trusted evaluation; never present them as independent verification. Retrieval is
 included once in total task time; do not subtract it twice. “Sub 1s” is a target to
 measure, not text to print regardless of the clock.
 
