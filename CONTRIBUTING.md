@@ -1,8 +1,7 @@
 # Contributing to Blaze
 
-This repository contains the public installer, skill, hook templates, and Solution Card
-contract. It works as a standalone checkout; the hosted application consumes the same
-repository as its `skill/` Git submodule.
+This repository contains the installer, skill, hook templates, and Solution Card
+contract. It works as a standalone checkout.
 
 ## Local checks
 
@@ -30,10 +29,10 @@ Preserve `{BLAZE_URL}` placeholders and the final `BLAZE-INSTALL-END` marker.
 ## Public boundary
 
 Contributions here may include generic examples, schemas, validators, plugin code, and
-documentation. Application authentication, database schemas and migrations, deployment
-configuration, the private card corpus, distillation code, real session transcripts,
-benchmark runs, and credentials are outside this repository. Use synthetic
-examples when demonstrating a bug, and inspect `git diff --cached` before committing.
+documentation. Do not commit service credentials, operational configuration, card
+contents, real prompts, source excerpts, paths, logs, transcripts, personal data, or
+benchmark inputs. Use synthetic examples when demonstrating a bug, and inspect
+`git diff --cached` before committing.
 
 The package at the root is marked `private` to prevent accidental npm publication.
 That flag does not control this GitHub repository's visibility. The release process

@@ -15,20 +15,21 @@ from disk, and follow it instead of the summary.
 You are a coding agent, and this file is a job to do now, not documentation for a human.
 Run the commands yourself; the user should only have to approve permission prompts.
 The installer writes only Blaze's skill and tool configuration under `~/.claude`,
-`~/.agents/skills/blaze`, `~/.codex`, or `~/.config/opencode`, including the shared client helper, token, and private timing receipts, plus the temporary
+`~/.agents/skills/blaze`, `~/.codex`, or `~/.config/opencode`, including the shared client helper, credential, and local timing receipts, plus the temporary
 installer download described above. It does not modify the user's repository.
 
-Blaze watches prompts and splices in a verified Solution Card when one matches a problem an
-earlier agent already solved: two hooks (prompt-submitted, session-stopped) and one skill.
+**Solve once. Build together.** Blaze is a collective memory of verified solutions,
+shared across agents and the people using them. Hooks stay local and remind the agent
+to prepare a privacy-bounded conceptual lookup when prior knowledge may help.
 
-Lookup can run anonymously. A private installation token adds the authenticated path for
-durable decision receipts, outcome reports, installation claims, and contributions. An
-anonymous match can still provide useful guidance, but it cannot create an authenticated
-receipt or submit an outcome. Human signup is not required for either path.
-
-Human signup is optional. Complete the normal installation without creating an account.
-The installed skill explains `/signup`, `/account`, and the helper's explicit `claim`
-command if the user later wants to connect this installation to their account.
+Every service request requires an installation token stored with user-only permissions. Authentication makes
+contributions traceable; rate limits protect the shared resource. Human signup is
+optional. Complete the normal installation without creating an account.
+The installed client uses Blaze's HTTPS API; no MCP server is required. It reloads
+this saved identity on later sessions. If the user says “I have a Blaze account” or
+asks to link this agent, follow the installed skill's account-linking instructions:
+prepare a claim code with the existing token, then let the human approve it in their
+browser. Do not create another installation for linking.
 
 ## 0. Which tool are you?
 
@@ -49,22 +50,79 @@ The client requires Node.js 20 or newer, already available in most coding enviro
 Run `node --version` first. If it is missing or older, report the requirement and pause
 installation; do not claim working timing hooks.
 
-Run this next, in the shell you will use for your section:
+Set `BLAZE_TOOL` to `claude`, `codex`, or `opencode` for your current tool, then run
+this block and your section's block **in the same shell call**. It reuses an existing
+token; only a new installation registers. Never print the token or enable shell tracing.
 
 ```bash
-BLAZE_TOKEN=$(curl -fsS --max-time 5 -X POST {BLAZE_URL}/api/install \
-  -H 'content-type: application/json' -d '{}' \
-  | sed -n 's/.*"token"[^"]*"\([^"]*\)".*/\1/p')
-if [ -n "$BLAZE_TOKEN" ]; then echo "token obtained"; else echo "token unavailable"; fi
+set -e
+set +x
+: "${BLAZE_TOOL:?Set BLAZE_TOOL to claude, codex, or opencode}"
+BLAZE_TOKEN=$(node --input-type=module - "$BLAZE_TOOL" <<'TOKEN'
+import { readFileSync, existsSync, lstatSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+const tool = process.argv[2];
+const paths = {claude:'.claude/skills/blaze/token',codex:'.codex/blaze-token',opencode:'.config/opencode/blaze-token'};
+try {
+  if (!paths[tool]) throw new Error('Choose claude, codex, or opencode.');
+  const path = join(homedir(), paths[tool]);
+  let token;
+  if (existsSync(path)) {
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('The existing Blaze credential must be a regular file, not a symbolic link.');
+    if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) throw new Error('The existing Blaze credential must be owned by the current user.');
+    if ((stat.mode & 0o077) !== 0) throw new Error('The existing Blaze credential must use user-only permissions.');
+    if (stat.size > 4096) throw new Error('The existing Blaze credential is unexpectedly large.');
+    const raw = readFileSync(path, 'utf8').trim();
+    let origin;
+    try {
+      const credential = JSON.parse(raw);
+      if (credential?.version !== 1 || typeof credential.origin !== 'string' || typeof credential.token !== 'string') throw new Error();
+      origin = credential.origin;
+      token = credential.token;
+    } catch {
+      origin = 'https://blaze.pascal.app';
+      token = raw;
+    }
+    if (typeof token !== 'string' || !/^blz_[A-Za-z0-9_-]{43}$/.test(token)) {
+      throw new Error('A valid installation token is required; setup is incomplete.');
+    }
+    if (origin !== new URL('{BLAZE_URL}').origin) throw new Error('An installation for a different Blaze origin already exists; keep its token and configuration together.');
+  }
+  else {
+    const response = await fetch('{BLAZE_URL}/api/install', {
+      method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({tool}),
+      signal:AbortSignal.timeout(5000), redirect:'error',
+    });
+    if (!response.ok) {
+      const retry = response.headers.get('retry-after');
+      const id = response.headers.get('x-blaze-request-id');
+      const wait = /^\d+$/.test(retry ?? '') ? ` Retry after ${retry}s.` : '';
+      const trace = /^[0-9a-f-]{36}$/i.test(id ?? '') ? ` Request: ${id}.` : '';
+      throw new Error(`Registration failed (HTTP ${response.status}).${wait}${trace}`);
+    }
+    let registration;
+    try { registration = await response.json(); }
+    catch { throw new Error('Registration returned invalid JSON; setup is incomplete.'); }
+    token = registration?.token;
+  }
+  if (typeof token !== 'string' || !/^blz_[A-Za-z0-9_-]{43}$/.test(token)) {
+    throw new Error('A valid installation token is required; setup is incomplete.');
+  }
+  process.stdout.write(token);
+} catch (error) {
+  console.error(error.message);
+  process.exitCode = 1;
+}
+TOKEN
+) || exit 1
 ```
 
-If it comes back empty, **keep going** with an empty token: anonymous lookup still works,
-and you will mention lookup-only mode in your final report. Durable decision receipts,
-authenticated outcome reporting, installation claims, and contributions remain unavailable
-until a token is obtained. Do not retry more than once, and never ask the user for a key.
-
-Your Bash tool may start a fresh shell per call (Codex does), so run this step and your
-section's block in one call, or `$BLAZE_TOKEN` is empty when the block writes it.
+If registration fails or the token is empty/invalid, stop before changing hooks and
+report the installation as incomplete. On HTTP 429, respect `Retry-After`; do not loop,
+create another identity, or ask the user for a service key. An existing rejected token
+needs deliberate replacement or recovery, not automatic re-registration.
 
 ## 2. Claude Code
 
@@ -74,7 +132,11 @@ edit, no `settings.json` change. One bash call does the whole install:
 
 ```bash
 set -e
+set +x
+umask 077
+[ "$BLAZE_TOOL" = claude ] && [[ "$BLAZE_TOKEN" =~ ^blz_[A-Za-z0-9_-]{43}$ ]] || { echo "Run token setup for Claude first." >&2; exit 1; }
 D="$HOME/.claude/skills/blaze"
+[ ! -L "$D" ] || { echo "Refusing a symbolic-link Blaze directory." >&2; exit 1; }
 mkdir -p "$D/.claude-plugin" "$D/hooks"
 
 BLAZE_SKILL_TMP=$(mktemp "$D/.SKILL.md.XXXXXX")
@@ -102,16 +164,18 @@ cat > "$D/.claude-plugin/plugin.json" <<'PLUGIN'
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "blaze",
-  "version": "0.2.1",
-  "description": "Offers a verified Solution Card from an earlier agent run when the current prompt matches an already-solved problem.",
+  "version": "0.3.0",
+  "description": "Retrieves a verified Solution Card after an agent prepares a privacy-bounded conceptual query.",
   "skills": ["./"]
 }
 PLUGIN
 # hooks/hooks.json is auto-loaded from the plugin root. Do NOT name it in the manifest:
 # a duplicate reference can make every hook in it fail to load.
 
-printf '%s' "$BLAZE_TOKEN" > "$D/token"
-chmod 600 "$D/token"
+BLAZE_TOKEN_TMP=$(mktemp "$D/token.XXXXXX")
+printf '{"version":1,"origin":"%s","token":"%s"}\n' '{BLAZE_URL}' "$BLAZE_TOKEN" > "$BLAZE_TOKEN_TMP"
+chmod 600 "$BLAZE_TOKEN_TMP"
+mv "$BLAZE_TOKEN_TMP" "$D/token"
 
 cat > "$D/hooks/hooks.json" <<'HOOKS'
 {
@@ -123,19 +187,7 @@ cat > "$D/hooks/hooks.json" <<'HOOKS'
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs\" hook --tool claude",
             "timeout": 5,
-            "statusMessage": "Blaze: checking for a prior solution"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs\" hook --tool claude",
-            "timeout": 5,
-            "statusMessage": "Blaze: recording session"
+            "statusMessage": "Blaze: preparing privacy-safe lookup guidance"
           }
         ]
       }
@@ -168,7 +220,7 @@ settings = pathlib.Path.home() / ".claude" / "settings.json"
 cfg = json.loads(settings.read_text()) if settings.exists() else {}
 hooks = cfg.setdefault("hooks", {})
 command = "node " + shlex.quote(str(helper)) + " hook --tool claude"
-for event in ("UserPromptSubmit", "Stop"):
+for event in ("UserPromptSubmit",):
     template = source[event][0]["hooks"][0]
     groups = hooks.setdefault(event, [])
     existing = [h for g in groups for h in g.get("hooks", [])
@@ -178,6 +230,20 @@ for event in ("UserPromptSubmit", "Stop"):
             hook["command"] = command
     else:
         groups.append({"hooks": [{**template, "command": command}]})
+# Remove the obsolete Blaze Stop hook from older installs without touching other hooks.
+if "Stop" in hooks:
+    kept = []
+    for group in hooks["Stop"]:
+        entries = [h for h in group.get("hooks", [])
+                   if not (h.get("type") == "command" and
+                           ("blaze-client.mjs" in h.get("command", "") or
+                            "blaze-hook.sh" in h.get("command", "")))]
+        if entries:
+            kept.append({**group, "hooks": entries})
+    if kept:
+        hooks["Stop"] = kept
+    else:
+        hooks.pop("Stop")
 settings.write_text(json.dumps(cfg, indent=2) + "\n")
 print("Blaze fallback hooks merged; the installed skill remains in place.")
 CLAUDE_FALLBACK
@@ -188,12 +254,16 @@ Then go to §5.
 ## 3. Codex CLI
 
 Codex hooks are `type: "command"` only (there is no HTTP handler), so install a
-forwarder to the same timing client and point two events at it. `~/.codex/hooks.json` is often already in use —
+forwarder to the shared client for the local reminder. `~/.codex/hooks.json` is often already in use —
 **merge, never overwrite.**
 
 ```bash
 set -e
+set +x
+umask 077
+[ "$BLAZE_TOOL" = codex ] && [[ "$BLAZE_TOKEN" =~ ^blz_[A-Za-z0-9_-]{43}$ ]] || { echo "Run token setup for Codex first." >&2; exit 1; }
 BLAZE_SKILL_DIR="$HOME/.agents/skills/blaze"
+[ ! -L "$BLAZE_SKILL_DIR" ] || { echo "Refusing a symbolic-link Blaze directory." >&2; exit 1; }
 mkdir -p "$BLAZE_SKILL_DIR"
 BLAZE_SKILL_TMP=$(mktemp "$BLAZE_SKILL_DIR/.SKILL.md.XXXXXX")
 if curl -fsS --max-time 10 {BLAZE_URL}/skill.md -o "$BLAZE_SKILL_TMP" && test -s "$BLAZE_SKILL_TMP"; then
@@ -217,12 +287,14 @@ printf '%s\n' '{"origin":"{BLAZE_URL}"}' > "$BLAZE_SKILL_DIR/client-config.json"
 chmod 600 "$BLAZE_SKILL_DIR/client-config.json"
 
 mkdir -p "$HOME/.codex"
-printf '%s' "$BLAZE_TOKEN" > "$HOME/.codex/blaze-token"
-chmod 600 "$HOME/.codex/blaze-token"
+BLAZE_TOKEN_TMP=$(mktemp "$HOME/.codex/blaze-token.XXXXXX")
+printf '{"version":1,"origin":"%s","token":"%s"}\n' '{BLAZE_URL}' "$BLAZE_TOKEN" > "$BLAZE_TOKEN_TMP"
+chmod 600 "$BLAZE_TOKEN_TMP"
+mv "$BLAZE_TOKEN_TMP" "$HOME/.codex/blaze-token"
 
 cat > "$HOME/.codex/blaze-hook.sh" <<'HOOK'
 #!/usr/bin/env bash
-# The shared helper measures retrieval and stores private decision receipts.
+# The helper ignores raw hook fields and returns local lookup guidance only.
 node "$HOME/.agents/skills/blaze/blaze-client.mjs" hook --tool codex 2>/dev/null || printf '{}'
 exit 0
 HOOK
@@ -234,18 +306,29 @@ p = pathlib.Path(os.path.expanduser("~/.codex/hooks.json"))
 cfg = json.loads(p.read_text()) if p.exists() else {}
 hooks = cfg.setdefault("hooks", {})
 cmd = os.path.expanduser("~/.codex/blaze-hook.sh")
-for ev in ("UserPromptSubmit", "Stop"):
+for ev in ("UserPromptSubmit",):
     groups = hooks.setdefault(ev, [])
     if not any("blaze-hook.sh" in h.get("command", "")
                for g in groups for h in g.get("hooks", [])):
         groups.append({"hooks": [{"type": "command", "command": cmd, "timeout": 5}]})
+# Remove only Blaze's obsolete Stop entry from earlier installations.
+if "Stop" in hooks:
+    kept = []
+    for group in hooks["Stop"]:
+        entries = [h for h in group.get("hooks", []) if "blaze-hook.sh" not in h.get("command", "")]
+        if entries:
+            kept.append({**group, "hooks": entries})
+    if kept:
+        hooks["Stop"] = kept
+    else:
+        hooks.pop("Stop")
 p.write_text(json.dumps(cfg, indent=2) + "\n")
 print("hooks.json updated:", sorted(hooks))
 MERGE
 ```
 
-Codex requires a **one-time trust confirmation** per hook entry: tell the user to run
-`/hooks` in Codex and approve the two `blaze-hook.sh` entries (trust is recorded per entry
+Codex requires a **one-time trust confirmation** for the hook entry: tell the user to run
+`/hooks` in Codex and approve the `blaze-hook.sh` entry (trust is recorded per entry
 in `~/.codex/config.toml`, so other hooks are unaffected). Until
 they do, the hooks are inert — that is expected, not a failed install.
 
@@ -257,7 +340,11 @@ Plugin files in the user plugin directory load automatically at startup.
 
 ```bash
 set -e
+set +x
+umask 077
+[ "$BLAZE_TOOL" = opencode ] && [[ "$BLAZE_TOKEN" =~ ^blz_[A-Za-z0-9_-]{43}$ ]] || { echo "Run token setup for OpenCode first." >&2; exit 1; }
 BLAZE_SKILL_DIR="$HOME/.config/opencode/skills/blaze"
+[ ! -L "$BLAZE_SKILL_DIR" ] || { echo "Refusing a symbolic-link Blaze directory." >&2; exit 1; }
 mkdir -p "$BLAZE_SKILL_DIR"
 BLAZE_SKILL_TMP=$(mktemp "$BLAZE_SKILL_DIR/.SKILL.md.XXXXXX")
 if curl -fsS --max-time 10 {BLAZE_URL}/skill.md -o "$BLAZE_SKILL_TMP" && test -s "$BLAZE_SKILL_TMP"; then
@@ -281,32 +368,22 @@ printf '%s\n' '{"origin":"{BLAZE_URL}"}' > "$BLAZE_SKILL_DIR/client-config.json"
 chmod 600 "$BLAZE_SKILL_DIR/client-config.json"
 
 mkdir -p "$HOME/.config/opencode/plugins"
-printf '%s' "$BLAZE_TOKEN" > "$HOME/.config/opencode/blaze-token"
-chmod 600 "$HOME/.config/opencode/blaze-token"
+BLAZE_TOKEN_TMP=$(mktemp "$HOME/.config/opencode/blaze-token.XXXXXX")
+printf '{"version":1,"origin":"%s","token":"%s"}\n' '{BLAZE_URL}' "$BLAZE_TOKEN" > "$BLAZE_TOKEN_TMP"
+chmod 600 "$BLAZE_TOKEN_TMP"
+mv "$BLAZE_TOKEN_TMP" "$HOME/.config/opencode/blaze-token"
 
 cat > "$HOME/.config/opencode/plugins/blaze.js" <<'PLUGINJS'
 import { createClientForTool } from "../skills/blaze/blaze-client.mjs";
 
-export const blaze = async ({ directory }) => {
+export const blaze = async () => {
   const client = createClientForTool("opencode");
-  const ask = async (body) => { try { return await client.hook(body); } catch { return {}; } };
   return {
-  // Fires with the user's message before its parts are persisted, so pushing a
-  // synthetic text part splices the offer into this same turn.
+  // The local hook reminder never sends message parts or session metadata.
   "chat.message": async (_input, output) => {
-    const prompt = (output.parts ?? [])
-      .filter((p) => p.type === "text")
-      .map((p) => p.text)
-      .join("\n")
-      .trim();
-    if (!prompt) return;
-    const res = await ask({
-      hook_event_name: "UserPromptSubmit",
-      prompt,
-      cwd: directory,
-      session_id: output.message.sessionID,
-      client_event_id: `opencode:${output.message.id}`,
-    });
+    let res;
+    try { res = await client.hook({ hook_event_name: "UserPromptSubmit" }); }
+    catch { return; }
     const ctx = res?.additionalContext ?? res?.hookSpecificOutput?.additionalContext;
     if (!ctx) return;
     output.parts.push({
@@ -316,14 +393,6 @@ export const blaze = async ({ directory }) => {
       type: "text",
       synthetic: true,
       text: ctx,
-    });
-  },
-  event: async ({ event }) => {
-    if (event.type !== "session.idle") return;
-    await ask({
-      hook_event_name: "Stop",
-      cwd: directory,
-      session_id: event.properties?.sessionID,
     });
   },
   };
@@ -341,19 +410,24 @@ Blaze offers appear. Do not substitute a summary for the saved file. If the skil
 download failed, report the installation as incomplete instead of claiming success.
 Keep existing user and repository instructions in force.
 
-```bash
-curl -fsS --max-time 5 {BLAZE_URL}/api/stats
-```
+Verify authentication with your tool's installed helper (it reads the private token):
 
-Report in **one or two lines**: the `cards` count from that response ("Blaze installed
-- N verified cards available"), where you wrote, whether a token was obtained, and, for
-Codex, the `/hooks` approval still owed. Then stop: no test prompt, no reading the user's
-repository, no restarting their tool.
+| Tool | Command |
+| --- | --- |
+| Claude Code | `node "$HOME/.claude/skills/blaze/blaze-client.mjs" stats --tool claude` |
+| Codex | `node "$HOME/.agents/skills/blaze/blaze-client.mjs" stats --tool codex` |
+| OpenCode | `node "$HOME/.config/opencode/skills/blaze/blaze-client.mjs" stats --tool opencode` |
+
+Only after a successful response, report in **one or two lines**: "Blaze installed —
+N verified cards available", where you wrote, and, for Codex, the `/hooks` approval
+still owed. On failure, report setup as incomplete with the status/request ID; never
+include the token. Then stop: no test prompt, no reading the user's repository, no
+restarting their tool.
 
 ## 6. Uninstall
 
 - **Claude Code** — `rm -rf ~/.claude/skills/blaze`; if you used the §2 fallback, also
-  delete the two Blaze hook objects from `~/.claude/settings.json`.
+  delete the Blaze hook object from `~/.claude/settings.json`.
 - **Codex CLI** — `rm -f ~/.codex/blaze-hook.sh ~/.codex/blaze-token ~/.agents/skills/blaze/SKILL.md ~/.agents/skills/blaze/blaze-client.mjs ~/.agents/skills/blaze/client-config.json`, then remove
   the `blaze-hook.sh` entries from `~/.codex/hooks.json` and their
   `[hooks.state."...blaze..."]` lines from `~/.codex/config.toml`. Remove `~/.agents/skills/blaze/receipts` to erase local timing receipts.

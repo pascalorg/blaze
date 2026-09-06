@@ -7,19 +7,7 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs\" hook --tool claude",
             "timeout": 5,
-            "statusMessage": "Blaze: checking for a prior solution"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs\" hook --tool claude",
-            "timeout": 5,
-            "statusMessage": "Blaze: recording session"
+            "statusMessage": "Blaze: preparing privacy-safe lookup guidance"
           }
         ]
       }

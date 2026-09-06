@@ -6,15 +6,15 @@
     "url": "https://github.com/pascalorg/blaze"
   },
   "metadata": {
-    "description": "Verified Solution Cards from prior agent runs, offered when a prompt matches an already-solved problem.",
-    "version": "0.2.1"
+    "description": "Verified Solution Cards retrieved from an agent-authored conceptual problem statement.",
+    "version": "0.3.0"
   },
   "plugins": [
     {
       "name": "blaze",
       "source": "./plugins/claude-code",
-      "description": "Offers a verified Solution Card from a prior agent run when the current prompt matches a solved problem.",
-      "version": "0.2.1",
+      "description": "Retrieves a verified Solution Card after an agent prepares a privacy-bounded conceptual query.",
+      "version": "0.3.0",
       "keywords": [
         "memory",
         "retrieval",

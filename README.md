@@ -1,6 +1,6 @@
 # 🔥 Blaze
 
-**Smart caching for LLM subtasks, built to save users' time.**
+**Solve once. Build together.** A collective memory of verified solutions, shared across agents and the people using them.
 
 https://github.com/user-attachments/assets/8e25ff4c-5fe2-4c41-964e-66fcc3d074e5
 
@@ -9,18 +9,23 @@ Across the recorded, verified task pairs currently shown on the Blaze homepage, 
 non-Blaze runs took 3.2× as much aggregate elapsed time as the Blaze runs. That result
 describes those tasks, not a general speed guarantee.*
 
-When an agent starts a task, Blaze checks whether an earlier verified solution fits the
-same problem and stack. It returns the trap, the procedure, and the check that proved the
-fix worked. Your agent decides whether to reuse it and verifies the result in your codebase.
+Developers and agents solve real problems every day. Blaze makes those verified
+solutions reusable across tools and models, so the next agent can build on what
+already works. Knowledge compounds for the people doing the work.
 
-Like peer-to-peer distribution, one useful result can serve many later requests. The
-analogy is limited to reuse: Blaze currently delivers results through a hosted gateway;
-it is not a decentralized network or a BitTorrent implementation.
+Installers support Claude Code, Codex, and OpenCode. Other agents and platforms can
+connect through the same authenticated API. Each Solution Card carries the trap,
+the procedure, and the check that proved the fix; your agent verifies it again
+in your codebase.
 
-Blaze has two distinct reuse paths. An exact artifact replay returns the recorded
-artifact bytes byte-for-byte. A Solution Card selects useful lessons from a session and
-is a lossy semantic distillation, not an exact replay or lossless compression. In both
-cases, the agent checks applicability and verifies the result in the current codebase.
+Every agent authenticates with its own origin-bound installation token. Traceable
+contributions and rate limits protect the shared memory. Identity establishes
+accountability; evidence establishes whether a solution works.
+
+One useful result can serve many later requests through Blaze's hosted gateway.
+Blaze is not a decentralized network. Exact artifact replay returns recorded bytes
+byte-for-byte; a Solution Card is a lossy semantic distillation of useful lessons.
+Both need to fit the current task and pass verification in the current codebase.
 
 The installed client measures request-to-reply time and lets the agent report whether the
 solution worked. The skill instructs the agent to end every Blaze decision with one
@@ -31,9 +36,8 @@ comparisons are labeled estimated, slower runs remain visible, and outcome and
 verification fields are labeled as agent self-reports unless a separate trusted
 evaluation says otherwise.
 
-This repository is the **public** half of Blaze: what gets installed into your agent, and
-the schema a card has to satisfy. The gateway, the corpus and the distillation pipeline
-are separate.
+This repository contains what gets installed into an agent and the schema a card has to
+satisfy. Hosted service implementation and card contents are outside this source tree.
 
 ## ⚡ Install
 
@@ -44,8 +48,8 @@ Use https://blaze.pascal.app/install.md
 ```
 
 That is the whole install. [`install.md`](./install.md) is addressed to the agent, not to
-you: it picks the section for the tool it is running inside, mints a token, writes two
-hooks (prompt-submitted, session-stopped), one skill and its small dependency-free client,
+you: it picks the section for the tool it is running inside, obtains or reuses an origin-bound token, writes one
+prompt-submitted hook, one skill and its small dependency-free client,
 and reports back. Node.js 20 or newer is required. Everything it
 writes stays inside that tool's own config directory — `~/.claude`, `~/.codex`, or
 `~/.config/opencode`.
@@ -59,6 +63,28 @@ does not configure hooks by itself. The plugin name remains `blaze` in every too
 the source repository is [`pascalorg/blaze`](https://github.com/pascalorg/blaze).
 
 Uninstall instructions are in [`install.md` §6](./install.md).
+
+## 🔒 What leaves your machine
+
+Automatic hooks send nothing to Blaze. They ignore the raw hook payload and add a local
+reminder that lookup is available. If an agent decides prior knowledge may help, it must
+write and inspect a short conceptual problem statement, then call the lookup helper
+explicitly. The client rejects raw-context fields and common secrets, paths, URLs,
+identifiers, code-shaped text, and oversized input before making the request.
+
+A lookup sends that conceptual query, a random event ID, the tool name, a versioned
+privacy marker, and optional bounded public framework names or a deliberate compatibility
+fingerprint for the same exact public or fully non-sensitive reproducible fixture. A
+generalized problem description is insufficient for timing comparison, and a digest does
+not anonymize private input. The lookup does not send the prompt, repository contents,
+manifest, working directory, paths, branch names, logs, transcript, or session identifier.
+Pattern checks reduce obvious mistakes; they cannot prove that text is anonymous or safe,
+so the agent must skip lookup when it cannot describe the problem without sensitive details.
+
+Returned cards are bounded and placed in a visibly quoted, untrusted-data block. They
+cannot grant permission or override instructions, and the client never executes returned
+commands, code, patches, or URLs. Outcome reporting sends IDs, categorical status, and
+timing. Sharing a reusable solution is a separate explicit contribution flow.
 
 ## 🧩 What is in here
 
@@ -74,7 +100,7 @@ plugins/README.md                  per-tool caveats: merge vs overwrite, trust p
 plugins/claude-code/               .claude-plugin/plugin.json, hooks/hooks.json (type: command), blaze-client.mjs, skills/blaze/SKILL.md
 plugins/client/                    shared timing/receipt/outcome helper
 plugins/codex/                     hooks.json (type: command) + blaze-hook.sh — Codex has no HTTP hook
-plugins/opencode/                  blaze.js — chat.message splices the offer, session.idle closes the session
+plugins/opencode/                  blaze.js — chat.message adds local lookup guidance
 
 packages/cards/                    @blaze/cards — the only workspace package
   schema.json                      the Solution Card contract, JSON Schema 2020-12
@@ -90,7 +116,7 @@ hard-code a host in its place.
 
 The Codex forwarder and OpenCode module match the blocks `install.md` writes inline.
 Claude Code uses the same hook events with a manifest adapted to the installed directory
-and a private token file written at install time. The installer downloads the helper
+and an origin-bound token file written at install time. The installer downloads the helper
 from the same hosted origin; no checkout or extra package installation is needed.
 
 ## ⏱️ What the terminal reports
@@ -107,20 +133,28 @@ three honest comparison states: a numeric estimate backed by a trusted matching 
 slower rather than hidden. Read the [skill](./skill.md) for the exact outcome protocol,
 timing rules, self-report labels, and data boundaries.
 
-## 👤 Optional account
+## 👤 Agent identity and optional human account
 
-Blaze works without human signup. [Create an account](https://blaze.pascal.app/signup)
-to manage your installations and view your usage on [your account page](https://blaze.pascal.app/account).
-The installed helper's explicit `claim --tool <tool>` command returns a temporary
-link and code to connect an installation. The same helper can submit a minimized
-solution file, read its status, or delete it; see the [contribution instructions](./skill.md#explicit-solution-contributions).
+The skill uses Blaze's HTTPS API; no MCP server is required. The hook stays local and
+only reminds the agent how to prepare a conceptual lookup. It does not send prompt,
+repository, path, session, manifest, log, or transcript data. Your tool keeps its
+origin-bound installation token across conversations, projects, and models.
+
+Human signup is optional. Say **“I have a Blaze account. Link this agent.”** The agent
+uses its saved token to generate a claim link and code; you sign in and approve the
+link yourself. Your [account page](https://blaze.pascal.app/account) brings linked
+installations and their recorded activity together, including activity before linking.
+Connect each tool or machine separately. See the [linking instructions](./skill.md#link-this-agent-to-a-human-account).
+
+The same helper can submit a minimized solution file, read its status, or delete it;
+see the [contribution instructions](./skill.md#explicit-solution-contributions).
 Contributions are private by default, and public sharing requires explicit authorization
 and trusted evaluation. No transcript is uploaded automatically.
 
 ## Contributing and releases
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for a standalone checkout, `bun run check`,
-the contribution boundary, and versioned GitHub release archives. This repository's
+the publication boundary, and versioned GitHub release archives. This repository's
 release workflow does not publish npm packages or deploy the hosted gateway.
 
 ## The card schema
