@@ -16,16 +16,17 @@ const SENSITIVE_TEXT = [
   /(?:^|\s)(?:\/Users\/|\/home\/|[A-Za-z]:\\|\.\.\/|~\/)/,
   /(?:https?|file|ssh):\/\//i,
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
-  /-----BEGIN [A-Z ]+PRIVATE KEY-----/,
-  /\b(?:sk|ghp|github_pat|blz)_[A-Za-z0-9_-]{16,}\b/,
-  /\bAKIA[0-9A-Z]{16}\b/,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
+  /\b(?:sk|sk_live|sk_test|sb_secret|ghp|gho|github_pat|blz)_[A-Za-z0-9_-]{12,}\b/i,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/,
   /\bBearer\s+[A-Za-z0-9._~-]{12,}\b/i,
-  /\b(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+/i,
+  /\b(?:password|passwd|secret|token|api[_-]?key|client[_-]?secret)\s*[:=]\s*\S+/i,
   /\beyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{12,}\b/,
   /\b[a-f0-9]{40,}\b/i,
 ];
 const RESULTS = new Set(["solved_as_is", "solved_with_changes", "solved_without_memory", "failed", "not_tried", "unknown"]);
 const VERIFICATIONS = new Set(["passed", "failed", "not_run", "unknown"]);
+const CONTRIBUTION_STATES = new Set(["queued", "evaluating", "accepted", "rejected", "failed", "revoked"]);
 const BOUNDARIES = new Set(["task_start_to_agent_end", "task_start_to_verification_end"]);
 const ENDS = new Set(["stop", "subagentstop", "sessionend", "session.idle", "sessioncompleted"]);
 const positiveDuration = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
@@ -195,6 +196,17 @@ function untrustedReference(value) {
   ].join("\n");
 }
 
+/** Validate the documented full-card response and serialize it into inert text. */
+function cardReferenceText(data, expected) {
+  exactKeys(data, new Set(["id", "variant", "revision_id", "card"]), "Blaze card");
+  if (data.id !== expected.cardId || data.revision_id !== expected.revisionId) throw new Error("Blaze returned a card outside the requested offer");
+  if (data.variant !== null && (typeof data.variant !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(data.variant))) {
+    throw new Error("Blaze returned an invalid card variant");
+  }
+  if (!plainObject(data.card)) throw new Error("Blaze returned invalid card data");
+  return JSON.stringify(data.card, null, 2);
+}
+
 async function boundedJson(response, requestId) {
   const maximum = 65_536;
   const declared = Number(response.headers.get("content-length"));
@@ -349,14 +361,14 @@ export function createClient({ origin, token = "", stateDir, tool, helperPath = 
       // The file supplies the complete server schema. Do not add an event ID, change
       // visibility, wrap the card, or save another local copy of the candidate.
       const { data } = await request("/api/contributions", input);
-      if (!UUID.test(data?.contribution_id ?? "") || !["queued", "evaluating", "verified", "rejected", "revoked"].includes(data.state) || !["private", "public"].includes(data.visibility)) throw new Error("Blaze returned an invalid contribution receipt");
+      if (!UUID.test(data?.contribution_id ?? "") || !CONTRIBUTION_STATES.has(data.state) || !["private", "public"].includes(data.visibility)) throw new Error("Blaze returned an invalid contribution receipt");
       return { contribution_id: data.contribution_id, state: data.state, visibility: data.visibility };
     },
     async contribution(id) {
       if (!UUID.test(id ?? "")) throw new Error("A server-issued contribution UUID is required");
       const { data } = await request(`/api/contributions/${id}`);
       const { id: contribution_id, state, visibility, created_at, updated_at } = data;
-      if (!UUID.test(contribution_id ?? "") || !["queued", "evaluating", "verified", "rejected", "revoked"].includes(state) || !["private", "public"].includes(visibility)) throw new Error("Blaze returned an invalid contribution status");
+      if (!UUID.test(contribution_id ?? "") || !CONTRIBUTION_STATES.has(state) || !["private", "public"].includes(visibility)) throw new Error("Blaze returned an invalid contribution status");
       if (created_at !== undefined && (typeof created_at !== "string" || Number.isNaN(Date.parse(created_at)))) throw new Error("Blaze returned an invalid contribution timestamp");
       if (updated_at !== undefined && (typeof updated_at !== "string" || Number.isNaN(Date.parse(updated_at)))) throw new Error("Blaze returned an invalid contribution timestamp");
       return { contribution_id, state, visibility, created_at, updated_at };
@@ -385,8 +397,7 @@ export function createClient({ origin, token = "", stateDir, tool, helperPath = 
       if (!offer || !UUID.test(offer.offer_id ?? "")) throw new Error("Card was not offered for this decision");
       if (saved.outcome) throw new Error("Outcome already prepared; start a new lookup for new work");
       const { data, elapsed } = await request(`/api/cards/${encodeURIComponent(cardId)}?offer_id=${encodeURIComponent(offer.offer_id)}`);
-      const raw = typeof data === "string" ? data : data?.card ?? data?.content;
-      const reference = untrustedReference(raw);
+      const reference = untrustedReference(cardReferenceText(data, { cardId, revisionId: offer.revision_id }));
       saved.retrieval_ms += elapsed;
       save(receiptPath(decisionId), saved);
       return { card_id: cardId, untrusted_reference: reference };
