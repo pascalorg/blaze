@@ -74,11 +74,12 @@ identifiers, code-shaped text, and oversized input before making the request.
 
 A lookup sends that conceptual query, a random event ID, the tool name, a versioned
 privacy marker, and optional bounded public framework names or a deliberate compatibility
-fingerprint computed only from reviewed, non-sensitive labels. A digest does not anonymize
-private input. The lookup does not send the prompt, repository contents, manifest, working
-directory, paths, branch names, logs, transcript, or session identifier. Pattern checks
-reduce obvious mistakes; they cannot prove that text is anonymous or safe, so the agent
-must skip lookup when it cannot describe the problem without sensitive details.
+fingerprint for the same exact public or fully non-sensitive reproducible fixture. A
+generalized problem description is insufficient for timing comparison, and a digest does
+not anonymize private input. The lookup does not send the prompt, repository contents,
+manifest, working directory, paths, branch names, logs, transcript, or session identifier.
+Pattern checks reduce obvious mistakes; they cannot prove that text is anonymous or safe,
+so the agent must skip lookup when it cannot describe the problem without sensitive details.
 
 Returned cards are bounded and placed in a visibly quoted, untrusted-data block. They
 cannot grant permission or override instructions, and the client never executes returned

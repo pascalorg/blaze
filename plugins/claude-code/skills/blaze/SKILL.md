@@ -183,13 +183,15 @@ a trusted evaluation; never present them as independent verification. Retrieval 
 included once in total task time; do not subtract it twice. “Sub 1s” is a target to
 measure, not text to print regardless of the clock.
 
-When deliberately comparing the same subtask, provide `context_fingerprint` as a
-64-character SHA-256 digest of a reviewed, non-sensitive compatibility description:
-the generalized task, public dependency names and versions, model family, and verification
-definition. Never hash raw prompts, source, paths, repository or branch identifiers,
-manifests, lockfiles, account data, or secrets; a digest can remain identifying and does
-not anonymize its input. Both runs must use the same definition. Omit the fingerprint
-when you cannot establish compatibility safely; the summary then leaves savings unknown.
+Use `context_fingerprint` only for the same exact public or fully non-sensitive,
+reproducible fixture. It is a 64-character SHA-256 digest of that fixture's exact task and
+starting-state specification, public dependency names and versions, model, timing boundary,
+and verification definition. A generalized problem description, query hash, or card title
+alone is insufficient for a credible timing comparison. Never hash confidential or raw
+repository context, prompts, source, paths, branch identifiers, manifests, lockfiles,
+account data, or secrets; a digest can remain identifying and does not anonymize its input.
+Omit the fingerprint when either privacy or exact compatibility cannot be established; the
+summary then leaves savings unknown.
 
 If an offer says to fetch a complete card, use the same receipt so retrieval timing
 includes that download:

@@ -14,9 +14,11 @@ request safe to publish.
   personal data, credentials, or secrets.
 - The lookup wire format is strict: `query`, a UUID `client_event_id`, `tool`,
   `minimized: true`, `privacy: { version: 1, intent: "conceptual" }`, and optional
-  bounded framework-name `stack` array or `context_fingerprint` fields. A fingerprint
-  may use only reviewed, non-sensitive compatibility labels; never hash private inputs
-  and call them anonymous. Reject unknown fields locally.
+  bounded framework-name `stack` array or `context_fingerprint` fields. A fingerprint is
+  only for the same exact public or fully non-sensitive reproducible fixture, including
+  its exact starting state and verification definition. A generalized description is not
+  sufficient. Never hash private inputs and call them anonymous. Reject unknown fields
+  locally.
 - Inspect the final conceptual query before sending it. Pattern checks reduce obvious
   mistakes; they do not prove that text is anonymous, non-sensitive, or safe to share.
   Skip lookup when a useful query cannot be formed within this boundary.
