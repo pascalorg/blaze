@@ -21,6 +21,11 @@ installer download described above. It does not modify the user's repository.
 Blaze watches prompts and splices in a verified Solution Card when one matches a problem an
 earlier agent already solved: two hooks (prompt-submitted, session-stopped) and one skill.
 
+Lookup can run anonymously. A private installation token adds the authenticated path for
+durable decision receipts, outcome reports, installation claims, and contributions. An
+anonymous match can still provide useful guidance, but it cannot create an authenticated
+receipt or submit an outcome. Human signup is not required for either path.
+
 Human signup is optional. Complete the normal installation without creating an account.
 The installed skill explains `/signup`, `/account`, and the helper's explicit `claim`
 command if the user later wants to connect this installation to their account.
@@ -53,9 +58,10 @@ BLAZE_TOKEN=$(curl -fsS --max-time 5 -X POST {BLAZE_URL}/api/install \
 if [ -n "$BLAZE_TOKEN" ]; then echo "token obtained"; else echo "token unavailable"; fi
 ```
 
-If it comes back empty, **keep going** with an empty token: hooks still work, and you will
-mention it in your final line. Authenticated outcome reporting will be unavailable until a
-token is obtained. Do not retry more than once, and never ask the user for a key.
+If it comes back empty, **keep going** with an empty token: anonymous lookup still works,
+and you will mention lookup-only mode in your final report. Durable decision receipts,
+authenticated outcome reporting, installation claims, and contributions remain unavailable
+until a token is obtained. Do not retry more than once, and never ask the user for a key.
 
 Your Bash tool may start a fresh shell per call (Codex does), so run this step and your
 section's block in one call, or `$BLAZE_TOKEN` is empty when the block writes it.

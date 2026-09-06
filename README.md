@@ -1,27 +1,35 @@
 # 🔥 Blaze
 
-**Code 4× faster.** Shared, verified solutions for AI coding agents.
+**Smart caching for LLM subtasks, built to save users' time.**
 
 https://github.com/user-attachments/assets/8e25ff4c-5fe2-4c41-964e-66fcc3d074e5
 
 *A condensed replay of recorded mind-map runs: Claude Code versus Claude Code + Blaze.
-Timers show the original run durations.*
+Across 11 recorded, verified website task pairs, the non-Blaze runs took 3.2× as much
+aggregate elapsed time as the Blaze runs. That result describes those tasks, not a
+general speed guarantee.*
 
-Blaze is **smart caching for LLM subtasks, built to save users' time**. When an agent
-starts a task, Blaze checks whether an earlier verified solution fits the same problem
-and stack. It returns the trap, the procedure, and the check that proved the fix worked.
-Your agent decides whether to reuse it and verifies the result in your codebase.
+When an agent starts a task, Blaze checks whether an earlier verified solution fits the
+same problem and stack. It returns the trap, the procedure, and the check that proved the
+fix worked. Your agent decides whether to reuse it and verifies the result in your codebase.
 
-Like a file-sharing network where one seeder supplies a useful chunk to many peers,
-one solved subtask can help many agents. Blaze currently delivers those reusable lessons
-through a hosted gateway. Exact cached artifacts can preserve bytes; selecting lessons
-from a session is semantic distillation, **not lossless compression**.
+Like peer-to-peer distribution, one useful result can serve many later requests. The
+analogy is limited to reuse: Blaze currently delivers results through a hosted gateway;
+it is not a decentralized network or a BitTorrent implementation.
+
+Blaze has two distinct reuse paths. An exact artifact replay returns the recorded
+artifact bytes byte-for-byte. A Solution Card selects useful lessons from a session and
+is a lossy semantic distillation, not an exact replay or lossless compression. In both
+cases, the agent checks applicability and verifies the result in the current codebase.
 
 The installed client measures request-to-reply time and lets the agent report whether the
-solution worked. Every task ends with the original solve time, retrieval time, and time
-saved — with unavailable measurements shown as unknown and prior-run savings labeled
-estimated. A slower result remains visible. This feedback is a foundation for improving
-retrieval; it is not proof that automatic learning or a particular speedup has occurred.
+solution worked. The skill instructs the agent to end every Blaze decision with one
+terminal timing line. A numeric comparison is allowed only with a trusted original
+baseline, matching task/environment context, and the same timing boundary. Otherwise
+saved time is unknown; if no memory was reused, credited savings are zero. Prior-run
+comparisons are labeled estimated, slower runs remain visible, and outcome and
+verification fields are labeled as agent self-reports unless a separate trusted
+evaluation says otherwise.
 
 This repository is the **public** half of Blaze: what gets installed into your agent, and
 the schema a card has to satisfy. The gateway, the corpus and the distillation pipeline
@@ -93,9 +101,11 @@ Blaze · original solve unknown · retrieval 0.28s · time saved unknown
 
 Original time requires verified provenance and a compatible task/environment. The client
 measures the full reply, including network and parsing. Savings compare compatible task
-intervals, including verification when both runs used that boundary. No memory reused
-means zero credited savings; missing evidence stays unknown. Read the [skill](./skill.md)
-for the exact outcome protocol, timing rules, and data boundaries.
+intervals, including verification when both runs used that boundary. The final line has
+three honest comparison states: a numeric estimate backed by a trusted matching baseline,
+`0s credited (no memory reused)`, or `unknown`. A numeric slower comparison is reported as
+slower rather than hidden. Read the [skill](./skill.md) for the exact outcome protocol,
+timing rules, self-report labels, and data boundaries.
 
 ## 👤 Optional account
 
