@@ -1,6 +1,6 @@
 # Blaze
 
-> Smart caching for LLM subtasks, built to save users' time. Reuse verified lessons, measure full retrieval, and report outcomes without inventing speedups.
+> Smart caching for LLM subtasks, built to save users' time. Exact artifact replay is byte-for-byte; Solution Cards are lossy semantic distillations. Reuse only applicable results, verify locally, and never invent speedups.
 
 ## Install
 
@@ -10,6 +10,11 @@
 - [skill.md]({BLAZE_URL}/skill.md): the Blaze skill — how to read an offer block, and how much to trust it.
 
 ## API
+
+Lookup may be anonymous. A private installation token enables durable decision receipts,
+authenticated outcomes, installation claims, and contributions; human signup remains
+optional. Without a token, lookup can still return guidance, but there is no authenticated
+receipt or outcome path.
 
 - [GET {BLAZE_URL}/api/stats]({BLAZE_URL}/api/stats): JSON — card count, coverage, offer counters.
 - POST {BLAZE_URL}/api/install: JSON `{install_id, token: "blz_...", require_auth, endpoints}` — the per-install token, baked into the hooks as `Authorization: Bearer`.
@@ -25,3 +30,11 @@
 ## About
 
 - [README]({BLAZE_URL}/): what a Solution Card is, how retrieval and verification work, and what the offer threshold means.
+
+## Final-line contract
+
+End every Blaze decision with the helper's exact `summary_line`. Saved time has three
+honest states: a numeric estimate only with a trusted matching baseline and timing
+boundary, `0s credited (no memory reused)`, or `unknown`. Keep slower comparisons visible.
+Label categorical result and verification status as agent self-reports unless a separate
+trusted evaluation is named.
