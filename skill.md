@@ -3,7 +3,7 @@ name: blaze
 description: Reuse and improve verified coding lessons across agents. Use for a nontrivial debugging or implementation problem where an earlier solution could help, when a Blaze offer or receipt appears, or when the user asks to install, update, contribute to, or link Blaze. Check applicability, verify locally, and close the lookup with an honest outcome and contribution disposition.
 compatibility: Requires Node.js 20 or later and explicit HTTPS access to the configured Blaze service. Local reminder hooks need no network access. No model provider credentials are needed.
 metadata:
-  version: "0.4.1"
+  version: "0.4.2"
 ---
 
 # Blaze

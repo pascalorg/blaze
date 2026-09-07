@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "blaze",
   "displayName": "Blaze",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Retrieves a verified Solution Card after an agent prepares a privacy-bounded conceptual query.",
   "author": {
     "name": "Blaze"

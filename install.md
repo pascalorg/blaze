@@ -1,4 +1,4 @@
-# Install Blaze 0.4.1
+# Install Blaze 0.4.2
 
 Blaze shares verified coding lessons through an explicitly invoked client.
 Installing it does not authorize uploading prompts, source or transcripts.
