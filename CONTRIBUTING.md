@@ -73,3 +73,8 @@ bytes. Published versions cannot silently change their bytes. The hosted build v
 its pinned release; local edited trees produce a draft accepted only on loopback origins.
 Digests from the same HTTPS origin detect corruption and mixed downloads, not a
 compromised publisher. Manager-owned installations retain their manager's trust boundary.
+
+Activation journals from 0.4.2 record the service origin before swapping files.
+Earlier update journals can recover through their prior ownership record. An older
+first-install journal with neither an origin nor a prior record is preserved for
+operator recovery; the current caller must not assign it a new origin.

@@ -11,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN = /^blz_[A-Za-z0-9_-]{43}$/;
 const CARD_ID = /^[a-z0-9][a-z0-9-]{2,62}$/;
 const DEFAULT_ORIGIN = "https://blaze.pascal.app";
-export const CLIENT_VERSION = "0.4.1";
+export const CLIENT_VERSION = "0.4.2";
 export const CLIENT_CONTRACT = 1;
 export const CLIENT_TOOLS = ["claude", "codex", "opencode", "cursor", "openclaw", "agent"];
 const RELEASE_FILES = ["SKILL.md", "blaze-client.mjs"];
@@ -645,13 +645,14 @@ async function locked(path, work) {
 export function createLifecycle({tool, home = homedir(), origin, helperPath = fileURLToPath(import.meta.url), fetchImpl = fetch}) {
   const paths = toolPaths(tool, home);
   const invokedRoot = resolve(dirname(helperPath));
-  // Hosts can discover another host's global copy. Only an already recorded
-  // direct bundle (or its interrupted transaction) can establish ownership.
+  // Hosts can discover another host's global copy. Only a completed direct
+  // ownership record binds that copy to an origin. The original host must
+  // recover a first install interrupted before that record was committed.
   // Credentials and receipts still belong to the invoking tool's state directory.
   if (invokedRoot !== resolve(paths.root) && CLIENT_TOOLS.some(name => resolve(toolPaths(name,home).root) === invokedRoot)) {
     const recordedState = join(home,".config/blaze/bundles",sha256(invokedRoot).slice(0,32));
     homePath(home,invokedRoot);homePath(home,recordedState);
-    if (pathStat(join(recordedState,"installation.json")) || pathStat(join(recordedState,"transaction.json"))) paths.root = invokedRoot;
+    if (pathStat(join(recordedState,"installation.json"))) paths.root = invokedRoot;
   }
   const base = trustedOrigin(origin ?? readToolCredential(tool, home, false).origin);
   const bundleState = join(home, ".config/blaze/bundles", sha256(resolve(paths.root)).slice(0,32));
@@ -762,10 +763,12 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
   }
   function recover() {
     const journal = loadRequiredIfPresent(journalPath); if (!journal) return;
-    exactKeys(journal,new Set(["version","id","release","prior"]),"Activation journal");
-    if (journal.version!==1 || !UUID.test(journal.id ?? "")) throw new Error("Invalid activation journal");
+    exactKeys(journal,new Set(journal.version===2 ? ["version","id","origin","release","prior"] : ["version","id","release","prior"]),"Activation journal");
+    if (![1,2].includes(journal.version) || !UUID.test(journal.id ?? "")) throw new Error("Invalid activation journal");
     const next = validateRelease(journal.release,base);
     const prior = validateMetadata(journal.prior);
+    const recordedOrigin = journal.version===2 ? trustedOrigin(journal.origin) : prior?.origin;
+    if (recordedOrigin!==base) throw new Error("Interrupted installation has no matching recorded service origin; preserve its state for recovery");
     const stage = join(bundleState,"staging",journal.id), backup = join(bundleState,"backups",journal.id);
     homePath(home,stage);homePath(home,backup);homePath(home,paths.root);
     if (existsSync(paths.root) && verifyBundle(paths.root,next,false,true)) {
@@ -842,7 +845,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
         if (syntax.status!==0) throw new Error("Release client failed syntax validation");
         const credential = await setup();
         migrateReceipts();
-        save(journalPath,{version:1,id,release:next,prior});
+        save(journalPath,{version:2,id,origin:base,release:next,prior});
         if (existsSync(paths.root)) renameSync(paths.root,backup);
         mkdirSync(dirname(paths.root),{recursive:true,mode:0o700});
         renameSync(stage,paths.root);
@@ -885,7 +888,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
         if (!verifyBundle(paths.root,meta.release) || !verifyBundle(backup,previous)) throw new Error("Rollback bundle was modified");
         const id = randomUUID(), stage = join(bundleState,"staging",id);
         ensurePrivateDir(dirname(stage));renameSync(backup,stage);
-        save(journalPath,{version:1,id,release:previous,prior:{...meta,pin:previous.version}});
+        save(journalPath,{version:2,id,origin:base,release:previous,prior:{...meta,pin:previous.version}});
         const currentBackup = join(bundleState,"backups",id);renameSync(paths.root,currentBackup);renameSync(stage,paths.root);recover();
         return {version:previous.version,activation:"rolled_back",reload_required:true,pin:previous.version};
       });

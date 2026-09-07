@@ -193,6 +193,36 @@ test("cross-host discovery preserves origin and symlink checks on recorded owner
   assert.throws(()=>createLifecycle({...options,tool:"opencode"}).status(),/symbolic links/);assert.equal(requests.length,before);
 });
 
+test("an incomplete first install cannot establish cross-host ownership or replace its origin",async t=>{
+  const {lifecycle,options,state,control}=await fixture(t);await lifecycle.install();
+  rmSync(join(state,"installation.json"));
+  put(join(state,"transaction.json"),{version:1,id:randomUUID(),release:control.release.manifest,prior:null});
+  let calls=0;
+  const discovered=createLifecycle({...options,tool:"opencode",origin:"https://example.invalid",fetchImpl:async()=>{calls++;return new Response(null,{status:503})}});
+  assert.equal((await discovered.update()).installation,"managed_or_unrecorded");
+  assert.equal(calls,0);assert.equal(existsSync(join(state,"installation.json")),false);
+});
+
+test("first-install recovery binds the recorded origin even for hosts with the same default directory",async t=>{
+  const {lifecycle,options,state,control,paths}=await fixture(t);await lifecycle.install();
+  const credential=readFileSync(paths.token,"utf8");rmSync(join(state,"installation.json"));
+  put(join(state,"transaction.json"),{version:2,id:randomUUID(),origin:options.origin,release:control.release.manifest,prior:null});
+  let calls=0;
+  const other=createLifecycle({...options,tool:"cursor",origin:"https://example.invalid",fetchImpl:async()=>{calls++;return new Response(null,{status:503})}});
+  await assert.rejects(other.update(),/recorded service origin/);assert.equal(calls,0);assert.equal(existsSync(join(state,"installation.json")),false);
+  assert.equal((await lifecycle.update()).credential,"reused");
+  assert.equal(get(join(state,"installation.json")).origin,options.origin);assert.equal(readFileSync(paths.token,"utf8"),credential);
+});
+
+test("legacy first-install journals without an origin are preserved instead of assigning the caller's origin",async t=>{
+  const {lifecycle,state,control,requests}=await fixture(t);await lifecycle.install();
+  rmSync(join(state,"installation.json"));
+  put(join(state,"transaction.json"),{version:1,id:randomUUID(),release:control.release.manifest,prior:null});
+  const before=requests.length;
+  await assert.rejects(lifecycle.update(),/recorded service origin/);assert.equal(requests.length,before);
+  assert.equal(existsSync(join(state,"installation.json")),false);assert.equal(existsSync(join(state,"transaction.json")),true);
+});
+
 test("intentional requests cache fixed version hints; retired contracts outrank pins",async t=>{
   const {lifecycle,paths,options}=await fixture(t);await lifecycle.install();await lifecycle.pin("0.4.0");
   let count=0;const client=createClient({origin:options.origin,token:get(paths.token).token,stateDir:join(paths.state,"receipts"),freshnessPath:join(paths.state,"freshness.json"),tool:"codex",
