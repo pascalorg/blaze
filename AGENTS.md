@@ -43,9 +43,9 @@ request safe to publish.
 
 - Bind credentials to their service origin, require user-only file permissions, reject
   symlinks for credentials and state, use typed lookup IDs for new local receipt paths,
-  preserve existing UUID receipt filenames and retry payload bytes, and disable redirects
-  on authenticated requests. References may accept only the exact legacy UUID or legacy
-  prefix assigned to that resource; new client-generated IDs use the canonical prefix.
+  use canonical typed resource IDs and disable redirects on authenticated requests.
+  Do not accept UUIDs or historical prefixes as resource IDs. Preserve unrelated local
+  files; archived receipts from a reset service are not current resource references.
 - Preserve unrelated user hooks and settings. Installation and removal must target only
   Blaze-owned files and entries.
 - Run `bun run typecheck`, `bun run test`, `bun run validate`, and `bun run build` before
