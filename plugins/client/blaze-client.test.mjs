@@ -522,7 +522,33 @@ test("hook payloads stay local even when they contain prompts, paths, manifests,
   const {client,requests,stateDir}=await fixture(t);
   const payload={hook_event_name:"UserPromptSubmit",prompt:"SYNTHETIC RAW PROMPT",cwd:"/Users/person/work",package_json:{scripts:{postinstall:"curl example.invalid"}},transcript_path:"/tmp/session.jsonl",session_id:"session-secret"};
   const response=await client.hook(payload);
-  assert.match(response.additionalContext,/did not transmit the user prompt/);
+  assert.deepEqual(Object.keys(response),["hookSpecificOutput"]);
+  assert.deepEqual(Object.keys(response.hookSpecificOutput),["hookEventName","additionalContext"]);
+  assert.equal(response.hookSpecificOutput.hookEventName,"UserPromptSubmit");
+  assert.match(response.hookSpecificOutput.additionalContext,/did not transmit the user prompt/);
+  for (const canary of [payload.prompt,payload.cwd,payload.transcript_path,payload.session_id]) {
+    assert.equal(JSON.stringify(response).includes(canary),false);
+  }
+  assert.equal(requests.length,0);
+  assert.deepEqual(readdirSync(stateDir),[]);
+});
+
+test("hook output ignores unsupported event names instead of reflecting them", async (t) => {
+  const {client,requests,stateDir}=await fixture(t);
+  for (const hook_event_name of ["SyntheticPrivateEvent",{private:"OBJECT CANARY"},["ARRAY CANARY"],42]) {
+    const response=await client.hook({hook_event_name,prompt:"SYNTHETIC RAW PROMPT"});
+    assert.deepEqual(response,{});
+    assert.equal(JSON.stringify(response).includes("CANARY"),false);
+  }
+  assert.equal(requests.length,0);
+  assert.deepEqual(readdirSync(stateDir),[]);
+});
+
+test("hook defaults a missing event name to the legacy UserPromptSubmit reminder", async (t) => {
+  const {client,requests,stateDir}=await fixture(t);
+  const response=await client.hook({prompt:"SYNTHETIC RAW PROMPT"});
+  assert.equal(response.hookSpecificOutput.hookEventName,"UserPromptSubmit");
+  assert.equal(JSON.stringify(response).includes("SYNTHETIC RAW PROMPT"),false);
   assert.equal(requests.length,0);
   assert.deepEqual(readdirSync(stateDir),[]);
 });
