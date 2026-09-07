@@ -522,7 +522,17 @@ test("hook payloads stay local even when they contain prompts, paths, manifests,
   const {client,requests,stateDir}=await fixture(t);
   const payload={hook_event_name:"UserPromptSubmit",prompt:"SYNTHETIC RAW PROMPT",cwd:"/Users/person/work",package_json:{scripts:{postinstall:"curl example.invalid"}},transcript_path:"/tmp/session.jsonl",session_id:"session-secret"};
   const response=await client.hook(payload);
-  assert.match(response.additionalContext,/did not transmit the user prompt/);
+  assert.deepEqual(Object.keys(response),["hookSpecificOutput"]);
+  assert.deepEqual(Object.keys(response.hookSpecificOutput),["hookEventName","additionalContext"]);
+  assert.equal(response.hookSpecificOutput.hookEventName,"UserPromptSubmit");
+  assert.match(response.hookSpecificOutput.additionalContext,/did not transmit the user prompt/);
+  assert.equal(requests.length,0);
+  assert.deepEqual(readdirSync(stateDir),[]);
+});
+
+test("hook output ignores unsupported event names instead of reflecting them", async (t) => {
+  const {client,requests,stateDir}=await fixture(t);
+  assert.deepEqual(await client.hook({hook_event_name:"SyntheticPrivateEvent",prompt:"SYNTHETIC RAW PROMPT"}),{});
   assert.equal(requests.length,0);
   assert.deepEqual(readdirSync(stateDir),[]);
 });

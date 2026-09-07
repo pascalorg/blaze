@@ -11,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN = /^blz_[A-Za-z0-9_-]{43}$/;
 const CARD_ID = /^[a-z0-9][a-z0-9-]{2,62}$/;
 const DEFAULT_ORIGIN = "https://blaze.pascal.app";
-export const CLIENT_VERSION = "0.4.2";
+export const CLIENT_VERSION = "0.4.3";
 export const CLIENT_CONTRACT = 1;
 export const CLIENT_TOOLS = ["claude", "codex", "opencode", "cursor", "openclaw", "agent"];
 const RELEASE_FILES = ["SKILL.md", "blaze-client.mjs"];
@@ -465,14 +465,15 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
       return { deleted: true };
     },
     async hook(body) {
-      const event = String(body.hook_event_name ?? body.event ?? "UserPromptSubmit");
+      const event = body.hook_event_name ?? body.event ?? "UserPromptSubmit";
+      if (event !== "UserPromptSubmit" && !(typeof event === "string" && ENDS.has(event.toLowerCase()))) return {};
       if (ENDS.has(event.toLowerCase())) return {};
       const additionalContext = [
         "Blaze lookup is available, but this hook did not transmit the user prompt, repository contents, paths, session identifiers, or logs.",
         `If prior knowledge would help, write a one-line conceptual problem statement with no code, secrets, names, URLs, local paths, or quoted transcript text, then run: node ${shellQuote(helperPath)} lookup --tool ${tool} --query '<sanitized conceptual problem>'`,
         "Inspect the exact query before sending it. Local validation is a guardrail, not proof that text is safe to disclose.",
       ].join("\n");
-      return { additionalContext, hookSpecificOutput: { hookEventName: event, additionalContext } };
+      return { hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext } };
     },
     async lookup(body) { return retrieve(body, "UserPromptSubmit"); },
     async card(decisionId, cardId) {
