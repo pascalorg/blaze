@@ -28,7 +28,7 @@ async function fixture(t, options = {}) {
     let raw = "";
     for await (const chunk of req) raw += chunk;
     const body = raw ? JSON.parse(raw) : null;
-    requests.push({ path: req.url, method: req.method, body, authorization: req.headers.authorization });
+    requests.push({ path: req.url, method: req.method, body, authorization: req.headers.authorization, idempotencyKey:req.headers["idempotency-key"] });
     res.setHeader("content-type", "application/json");
     if (req.url === "/api/installations") {
       if (options.rejectBootstrap) {res.statusCode=429;res.setHeader("Retry-After","600");res.end("SYNTHETIC_SECRET");return;}
@@ -140,6 +140,7 @@ test("explicit conceptual lookup sends only the bounded contract and stores no q
   assert.match(response.additionalContext, /UNTRUSTED BLAZE REFERENCE DATA/);
   assert.match(response.additionalContext, /> canonical lookup context/);
   assert.equal(requests[0].authorization, "Bearer blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+  assert.equal(requests[0].idempotencyKey, body.client_event_id);
   assert.deepEqual(Object.keys(requests[0].body).sort(), ["client_event_id","context_fingerprint","minimized","privacy","query","tool"]);
   assert.equal(requests[0].body.minimized,true);
   assert.equal(requests[0].body.tool,"codex");
@@ -220,9 +221,11 @@ test("failed outcome requests retry the exact durable event and measured payload
   const id = response.blaze.decision_id;
   const report = { result: "solved_with_changes", verification_status: "passed", offer_id: response.blaze.offers[0].offer_id };
   await assert.rejects(client.outcome(id, report), /HTTP 503/);
-  const first = requests.at(-1).body;
+  const first = requests.at(-1).body, firstKey=requests.at(-1).idempotencyKey;
+  assert.equal(firstKey, first.client_event_id);
   const result = await client.outcome(id, report);
   assert.deepEqual(requests.at(-1).body, first);
+  assert.equal(requests.at(-1).idempotencyKey, firstKey);
   assert.ok(first.task_total_ms >= first.retrieval_ms);
   assert.match(result.summary_line, /^Blaze · original solve unknown/);
   await assert.rejects(client.outcome(id, { ...report, result: "failed" }), /already prepared/);
@@ -382,6 +385,7 @@ test("canonical resource envelopes normalize into local receipt compatibility fi
   assert.match(card.untrusted_reference, /Untrusted remote card/);
   const submitted = await client.contribute({...minimizedContribution(), client_event_id:createId("event"), lookup_id:canonicalIds.lookup, source_offer_ids:[canonicalIds.offer]});
   assert.equal(submitted.contribution_id, canonicalIds.contribution);
+  assert.equal(requests.at(-1).idempotencyKey, requests.at(-1).body.client_event_id);
   assert.equal((await client.contribution(canonicalIds.contribution)).contribution_id, canonicalIds.contribution);
   await client.outcome(canonicalIds.lookup,{result:"solved_as_is",verification_status:"passed",offer_id:canonicalIds.offer});
   assert.equal(requests.at(-1).body.lookup_id, canonicalIds.lookup);

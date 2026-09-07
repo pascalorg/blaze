@@ -340,10 +340,12 @@ export function createClient({ origin, token = "", stateDir, freshnessPath, tool
       throw new Error(`Blaze is rate limited. Retry in ${Math.ceil((cooldown.until - Date.now()) / 1000)}s; keep the same installation and event IDs.`);
     }
     const start = performance.now();
+    const idempotencyKey = method === "POST" && isResourceReference("event", body?.client_event_id) ? body.client_event_id : null;
     const response = await fetchImpl(`${base}${path}`, {
       method,
       headers: { "content-type": "application/json", authorization: `Bearer ${token}`,
-        "Blaze-Version": API_VERSION, "Blaze-Client-Version": CLIENT_VERSION, "Blaze-Client-Contract": String(CLIENT_CONTRACT) },
+        "Blaze-Version": API_VERSION, "Blaze-Client-Version": CLIENT_VERSION, "Blaze-Client-Contract": String(CLIENT_CONTRACT),
+        ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(4500), redirect: "error",
     });
@@ -806,7 +808,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
       exactKeys(pending,new Set(["version","origin","token"]),"Pending registration");
       if (pending.version!==1 || pending.origin!==base || !TOKEN.test(pending.token ?? "")) throw new Error("Pending registration belongs to another service or is invalid");
       save(pendingPath,pending);
-      const data = parseJSON(await bytes("/api/installations",16*1024,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${pending.token}`},body:JSON.stringify({tool})}));
+      const data = parseJSON(await bytes("/api/installations",16*1024,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${pending.token}`,"Idempotency-Key":sha256(pending.token)},body:JSON.stringify({tool})}));
       const installId = responseId(data, "install", "installation");
       if (!TOKEN.test(data?.token ?? "") || !installId || data.bootstrap_contract!==2 || data.token!==pending.token) {
         throw new Error("This service does not support retryable registration; keep the saved pending credential");

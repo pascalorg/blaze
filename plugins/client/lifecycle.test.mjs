@@ -22,7 +22,7 @@ async function fixture(t) {
   const control={release:bundle("0.4.0"),offline:false,corrupt:false,lost:false,reject:0},requests=[],identities=new Map();
   const server=createServer(async(req,res)=>{
     let raw="";for await(const chunk of req) raw+=chunk;
-    requests.push({path:req.url,authorization:req.headers.authorization,body:raw?JSON.parse(raw):null});
+    requests.push({path:req.url,authorization:req.headers.authorization,idempotencyKey:req.headers["idempotency-key"],body:raw?JSON.parse(raw):null});
     if(control.offline){res.writeHead(503);res.end("PRIVATE_FAILURE_DETAIL");return;}
     if(req.url==="/api/skill-release"){res.setHeader("content-type","application/json");res.end(JSON.stringify(control.release.manifest));return;}
     if(req.url.startsWith("/releases/")) {
@@ -68,6 +68,9 @@ test("direct installation keeps credentials outside its portable folder and reus
   const before=readFileSync(paths.token,"utf8");
   assert.equal((await lifecycle.install()).credential,"reused");assert.equal(readFileSync(paths.token,"utf8"),before);
   assert.equal(requests.filter(r=>r.path==="/api/installations").length,1);
+  const registration=requests.find(r=>r.path==="/api/installations");
+  assert.equal(registration.idempotencyKey,hash(registration.authorization.slice(7)));
+  assert.notEqual(registration.idempotencyKey,registration.authorization.slice(7));
   assert.ok(requests.filter(r=>r.path.startsWith("/releases/")||r.path==="/api/skill-release").every(r=>r.authorization===undefined&&r.body===null));
   assert.equal(get(join(state,"installation.json")).mode,"direct");
   assert.equal(lifecycle.status().update,"current");
