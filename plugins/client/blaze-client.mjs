@@ -39,7 +39,6 @@ const VERIFICATIONS = new Set(["passed", "failed", "not_run", "unknown"]);
 const CONTRIBUTION_STATES = new Set(["queued", "evaluating", "accepted", "rejected", "failed", "revoked"]);
 const PARTICIPATION_STATUSES = new Set(["pending", "contributed", "no_novel_solution", "privacy_skip", "verification_missing", "not_solved", "not_applicable"]);
 const BOUNDARIES = new Set(["task_start_to_agent_end", "task_start_to_verification_end"]);
-const ENDS = new Set(["stop", "subagentstop", "sessionend", "session.idle", "sessioncompleted"]);
 const positiveDuration = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 7 * 24 * 60 * 60 * 1000;
 const wallNow = () => performance.timeOrigin + performance.now();
 const DURATION_PATTERN = "(?:0s|<0\\.01s|[0-9]{1,9}\\.[0-9]{1,2}s)";
@@ -466,8 +465,7 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
     },
     async hook(body) {
       const event = body.hook_event_name ?? body.event ?? "UserPromptSubmit";
-      if (event !== "UserPromptSubmit" && !(typeof event === "string" && ENDS.has(event.toLowerCase()))) return {};
-      if (ENDS.has(event.toLowerCase())) return {};
+      if (event !== "UserPromptSubmit") return {};
       const additionalContext = [
         "Blaze lookup is available, but this hook did not transmit the user prompt, repository contents, paths, session identifiers, or logs.",
         `If prior knowledge would help, write a one-line conceptual problem statement with no code, secrets, names, URLs, local paths, or quoted transcript text, then run: node ${shellQuote(helperPath)} lookup --tool ${tool} --query '<sanitized conceptual problem>'`,
