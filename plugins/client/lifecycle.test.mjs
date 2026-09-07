@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CLIENT_VERSION, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
+import { CLIENT_CONTRACT, CLIENT_VERSION, createId, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const source = readFileSync(new URL("./blaze-client.mjs",import.meta.url));
@@ -13,7 +13,7 @@ const put = (path,value) => {mkdirSync(resolve(path,".."),{recursive:true,mode:0
 const get = path => JSON.parse(readFileSync(path,"utf8"));
 function bundle(version) {
   const files = {"SKILL.md":Buffer.from(`---\nname: blaze\ndescription: A synthetic lifecycle fixture.\nmetadata:\n  version: "${version}"\n---\n`),"blaze-client.mjs":Buffer.concat([source,Buffer.from(`\n// release ${version}\n`)])};
-  return {files,manifest:{object:"skill_release",status:"published",version,created_at:"2026-09-07T00:00:00.000Z",updated_at:"2026-09-07T00:00:00.000Z",client_contract:1,minimum_client_contract:0,source_commit:"a".repeat(40),
+  return {files,manifest:{object:"skill_release",status:"published",version,created_at:"2026-09-07T00:00:00.000Z",updated_at:"2026-09-07T00:00:00.000Z",client_contract:CLIENT_CONTRACT,minimum_client_contract:0,source_commit:"a".repeat(40),
     artifacts:Object.entries(files).map(([name,bytes])=>({name,size:bytes.length,sha256:hash(bytes)}))}};
 }
 async function fixture(t) {
@@ -22,7 +22,7 @@ async function fixture(t) {
   const control={release:bundle("0.4.0"),offline:false,corrupt:false,lost:false,reject:0},requests=[],identities=new Map();
   const server=createServer(async(req,res)=>{
     let raw="";for await(const chunk of req) raw+=chunk;
-    requests.push({path:req.url,authorization:req.headers.authorization,body:raw?JSON.parse(raw):null});
+    requests.push({path:req.url,authorization:req.headers.authorization,idempotencyKey:req.headers["idempotency-key"],body:raw?JSON.parse(raw):null});
     if(control.offline){res.writeHead(503);res.end("PRIVATE_FAILURE_DETAIL");return;}
     if(req.url==="/api/skill-release"){res.setHeader("content-type","application/json");res.end(JSON.stringify(control.release.manifest));return;}
     if(req.url.startsWith("/releases/")) {
@@ -30,12 +30,12 @@ async function fixture(t) {
       if(req.url!==`/releases/${control.release.manifest.version}/${artifact?.sha256}/${name}`){res.writeHead(404);res.end();return;}
       res.end(control.corrupt ? "invalid bytes" : control.release.files[name]);return;
     }
-    if(req.url==="/api/install") {
+    if(req.url==="/api/installations") {
       if(control.reject){res.writeHead(control.reject,{"retry-after":"600"});res.end("PRIVATE_FAILURE_DETAIL");return;}
       const token=req.headers.authorization?.slice(7);
-      if(!identities.has(token))identities.set(token,randomUUID());
+      if(!identities.has(token))identities.set(token,createId("install"));
       if(control.lost){control.lost=false;req.socket.destroy();return;}
-      res.end(JSON.stringify({bootstrap_contract:2,install_id:identities.get(token),token}));return;
+      res.end(JSON.stringify({id:identities.get(token),object:"installation",bootstrap_contract:2,token}));return;
     }
     if(req.url==="/api/stats") {
       if(!identities.has(req.headers.authorization?.slice(7))){res.writeHead(401);res.end("PRIVATE_FAILURE_DETAIL");return;}
@@ -55,7 +55,7 @@ test("stable versions compare numerically and manifests contain only bounded fix
   for(const value of ["v1.0.0","01.0.0","1.0.0-beta","1.0.0+build","1.0.0/../../","9999999.0.0"])assert.throws(()=>compareVersions(value,"1.0.0"));
   const original=bundle("0.4.0").manifest;
   assert.equal(validateRelease(original,"https://example.invalid"),original);
-  for(const alter of [m=>m.artifacts[0].name="../../token",m=>m.artifacts[0].url="https://evil.invalid",m=>m.artifacts[0].size=1e9,m=>m.minimum_client_contract=2,m=>m.status="draft"]) {
+  for(const alter of [m=>m.artifacts[0].name="../../token",m=>m.artifacts[0].url="https://evil.invalid",m=>m.artifacts[0].size=1e9,m=>m.minimum_client_contract=CLIENT_CONTRACT+1,m=>m.status="draft"]) {
     const value=structuredClone(original);alter(value);assert.throws(()=>validateRelease(value,"https://example.invalid"));
   }
 });
@@ -67,7 +67,10 @@ test("direct installation keeps credentials outside its portable folder and reus
   assert.equal(statSync(paths.token).mode&0o777,0o600);
   const before=readFileSync(paths.token,"utf8");
   assert.equal((await lifecycle.install()).credential,"reused");assert.equal(readFileSync(paths.token,"utf8"),before);
-  assert.equal(requests.filter(r=>r.path==="/api/install").length,1);
+  assert.equal(requests.filter(r=>r.path==="/api/installations").length,1);
+  const registration=requests.find(r=>r.path==="/api/installations");
+  assert.equal(registration.idempotencyKey,hash(registration.authorization.slice(7)));
+  assert.notEqual(registration.idempotencyKey,registration.authorization.slice(7));
   assert.ok(requests.filter(r=>r.path.startsWith("/releases/")||r.path==="/api/skill-release").every(r=>r.authorization===undefined&&r.body===null));
   assert.equal(get(join(state,"installation.json")).mode,"direct");
   assert.equal(lifecycle.status().update,"current");
@@ -226,7 +229,7 @@ test("legacy first-install journals without an origin are preserved instead of a
 test("intentional requests cache fixed version hints; retired contracts outrank pins",async t=>{
   const {lifecycle,paths,options}=await fixture(t);await lifecycle.install();await lifecycle.pin("0.4.0");
   let count=0;const client=createClient({origin:options.origin,token:get(paths.token).token,stateDir:join(paths.state,"receipts"),freshnessPath:join(paths.state,"freshness.json"),tool:"codex",
-    fetchImpl:async()=>{count++;return new Response("PRIVATE_FAILURE_DETAIL",{status:426,headers:{"Blaze-Skill-Version":"0.5.0","Blaze-Min-Client-Contract":"2"}});}});
+    fetchImpl:async()=>{count++;return new Response("PRIVATE_FAILURE_DETAIL",{status:426,headers:{"Blaze-Skill-Version":"0.6.0","Blaze-Min-Client-Contract":String(CLIENT_CONTRACT+1)}});}});
   await client.hook({prompt:"PRIVATE_PROMPT"});assert.equal(count,0);
   await assert.rejects(client.stats(),/contract has retired/);assert.equal(lifecycle.status().update,"required");
   const stored=readFileSync(join(paths.state,"freshness.json"),"utf8");assert.equal(stored.includes("PRIVATE"),false);

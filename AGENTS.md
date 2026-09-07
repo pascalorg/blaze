@@ -12,7 +12,7 @@ request safe to publish.
   request, system or developer instructions, source code, diffs, manifests, working
   directory, file paths, branch or remote names, logs, transcripts, account identifiers,
   personal data, credentials, or secrets.
-- The lookup wire format is strict: `query`, a UUID `client_event_id`, `tool`,
+- The lookup wire format is strict: `query`, an `event_` client event ID, `tool`,
   `minimized: true`, `privacy: { version: 1, intent: "conceptual" }`, and optional
   bounded framework-name `stack` array, explicitly reviewed exact public
   `framework_versions` pairs, or `context_fingerprint` fields. Versions must never
@@ -42,8 +42,10 @@ request safe to publish.
 ## Client and installer changes
 
 - Bind credentials to their service origin, require user-only file permissions, reject
-  symlinks for credentials and state, use UUIDs for local receipt paths, and disable
-  redirects on authenticated requests.
+  symlinks for credentials and state, use typed lookup IDs for new local receipt paths,
+  use canonical typed resource IDs and disable redirects on authenticated requests.
+  Do not accept UUIDs or historical prefixes as resource IDs. Preserve unrelated local
+  files; archived receipts from a reset service are not current resource references.
 - Preserve unrelated user hooks and settings. Installation and removal must target only
   Blaze-owned files and entries.
 - Run `bun run typecheck`, `bun run test`, `bun run validate`, and `bun run build` before

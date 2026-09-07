@@ -7,14 +7,14 @@
   },
   "metadata": {
     "description": "Verified Solution Cards retrieved from an agent-authored conceptual problem statement.",
-    "version": "0.4.3"
+    "version": "0.5.0"
   },
   "plugins": [
     {
       "name": "blaze",
       "source": "./plugins/claude-code",
       "description": "Retrieves a verified Solution Card after an agent prepares a privacy-bounded conceptual query.",
-      "version": "0.4.3",
+      "version": "0.5.0",
       "keywords": [
         "memory",
         "retrieval",
