@@ -70,6 +70,10 @@ const SENSITIVE_TEXT = [
 const RESULTS = new Set(["solved_as_is", "solved_with_changes", "solved_without_memory", "failed", "not_tried", "unknown"]);
 const VERIFICATIONS = new Set(["passed", "failed", "not_run", "unknown"]);
 const CONTRIBUTION_STATES = new Set(["queued", "evaluating", "accepted", "rejected", "failed", "revoked"]);
+const LOOKUP_STATUSES = new Set(["completed"]);
+const OFFER_STATUSES = new Set(["offered", "accepted", "dismissed"]);
+const CARD_STATUSES = new Set(["draft", "active", "deprecated", "retired"]);
+const OUTCOME_STATUSES = new Set(["reported"]);
 const PARTICIPATION_STATUSES = new Set(["pending", "contributed", "no_novel_solution", "privacy_skip", "verification_missing", "not_solved", "not_applicable"]);
 const BOUNDARIES = new Set(["task_start_to_agent_end", "task_start_to_verification_end"]);
 const positiveDuration = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 7 * 24 * 60 * 60 * 1000;
@@ -173,6 +177,12 @@ function exactKeys(value, allowed, label) {
   for (const key of Object.keys(value)) if (!allowed.has(key)) throw new Error(`${label} contains an unsupported field`);
 }
 
+function timestamp(value, label, nullable = false) {
+  if (nullable && value === null) return null;
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) throw new Error(`Blaze returned an invalid ${label} timestamp`);
+  return value;
+}
+
 function responseId(value, resource, object) {
   if (!plainObject(value)) return null;
   if (value.object !== object) return null;
@@ -268,6 +278,16 @@ function validateContribution(input) {
   return input;
 }
 
+function contributionResponse(data, expectedId = null) {
+  exactKeys(data, new Set(["id", "object", "created_at", "updated_at", "status", "lookup_id", "visibility", "content", "evaluation", "revoked_at"]), "Blaze contribution");
+  const id = responseId(data, "contribution", "contribution");
+  if (!id || (expectedId !== null && id !== expectedId) || !CONTRIBUTION_STATES.has(data.status) || !["private", "public"].includes(data.visibility)
+    || !(data.lookup_id === null || isResourceReference("lookup", data.lookup_id)) || !plainObject(data.content)
+    || !(data.evaluation === null || plainObject(data.evaluation))) throw new Error("Blaze returned an invalid contribution receipt");
+  timestamp(data.created_at, "contribution created_at"); timestamp(data.updated_at, "contribution updated_at"); timestamp(data.revoked_at, "contribution revoked_at", true);
+  return data;
+}
+
 function untrustedReference(value) {
   if (typeof value !== "string" || value.length > 24_000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)) throw new Error("Blaze returned invalid or oversized reference material");
   const quoted = value.split("\n").map((line) => `> ${line}`).join("\n");
@@ -281,9 +301,12 @@ function untrustedReference(value) {
 
 /** Validate the documented full-card response and serialize it into inert text. */
 function cardReferenceText(data, expected) {
-  exactKeys(data, new Set(["id", "object", "created_at", "updated_at", "card_revision_id", "content"]), "Blaze card");
+  exactKeys(data, new Set(["id", "object", "created_at", "updated_at", "status", "authored_slug", "visibility", "variant", "card_variant_id", "card_revision_id", "content"]), "Blaze card");
   if (data.object !== "card" || data.id !== expected.cardId || data.card_revision_id !== expected.revisionId) throw new Error("Blaze returned a card outside the requested offer");
-  if (!plainObject(data.content)) throw new Error("Blaze returned invalid card data");
+  timestamp(data.created_at, "card created_at"); timestamp(data.updated_at, "card updated_at");
+  if (!CARD_STATUSES.has(data.status) || typeof data.authored_slug !== "string" || !["private", "public"].includes(data.visibility)
+    || (data.variant !== null && typeof data.variant !== "string") || (data.card_variant_id !== null && !isResourceReference("card_variant", data.card_variant_id))
+    || !plainObject(data.content)) throw new Error("Blaze returned invalid card data");
   return JSON.stringify(data.content, null, 2);
 }
 
@@ -416,18 +439,24 @@ export function createClient({ origin, token = "", stateDir, freshnessPath, tool
     const input = validateLookupInput(body, tool);
     const clientEventId = input.client_event_id;
     const { data: decision, elapsed } = await request("/api/lookups", input);
-    exactKeys(decision, new Set(["id","object","status","created_at","updated_at","context","offers","timing","policy","context_fingerprint"]), "Blaze lookup");
+    exactKeys(decision, new Set(["id","object","status","created_at","updated_at","decided_at","context","offers","timing","policy","context_fingerprint","retrieval"]), "Blaze lookup");
     const decisionId = responseId(decision, "lookup", "lookup");
-    if (!decisionId || decision.object !== "lookup") throw new Error("Blaze returned an invalid lookup");
+    if (!decisionId || decision.object !== "lookup" || !LOOKUP_STATUSES.has(decision.status)) throw new Error("Blaze returned an invalid lookup");
+    timestamp(decision.created_at, "lookup created_at"); timestamp(decision.updated_at, "lookup updated_at"); timestamp(decision.decided_at, "lookup decided_at");
+    if (!(decision.context === null || typeof decision.context === "string") || !(decision.context_fingerprint === null || /^[a-f0-9]{64}$/i.test(decision.context_fingerprint))
+      || !plainObject(decision.timing) || !positiveDuration(decision.timing.server_lookup_ms) || !plainObject(decision.policy) || typeof decision.policy.version !== "string" || decision.policy.version.length < 1 || decision.policy.version.length > 200
+      || !plainObject(decision.retrieval) || typeof decision.retrieval.mode !== "string" || !(decision.retrieval.variant === null || typeof decision.retrieval.variant === "string") || !Number.isSafeInteger(decision.retrieval.candidate_count) || decision.retrieval.candidate_count < 0)
+      throw new Error("Blaze returned invalid lookup metadata");
     exactKeys(decision.offers, new Set(["object", "data", "has_more", "next_cursor"]), "Blaze offer list");
     if (decision.offers.object !== "list" || decision.offers.has_more !== false || decision.offers.next_cursor !== null) throw new Error("Blaze returned an invalid offer list");
     const offerList = decision.offers.data;
     if (!Array.isArray(offerList) || offerList.length > 8) throw new Error("Blaze returned an invalid offer list");
     const offers = offerList.map((offer) => {
-      exactKeys(offer, new Set(["id", "object", "created_at", "updated_at", "card_id", "card_revision_id", "baseline"]), "Blaze offer");
+      exactKeys(offer, new Set(["id", "object", "created_at", "updated_at", "status", "offered_at", "lookup_id", "card_id", "card_revision_id", "baseline"]), "Blaze offer");
       const offerId = responseId(offer, "offer", "offer");
       const revisionId = offer.card_revision_id;
-      if (!offerId || !isResourceReference("card_revision", revisionId) || !CARD_ID.test(offer.card_id ?? "")) throw new Error("Blaze returned an invalid offer identifier");
+      if (!offerId || !isResourceReference("card_revision", revisionId) || !CARD_ID.test(offer.card_id ?? "") || offer.lookup_id !== decisionId || !OFFER_STATUSES.has(offer.status)) throw new Error("Blaze returned an invalid offer identifier");
+      timestamp(offer.created_at, "offer created_at"); timestamp(offer.updated_at, "offer updated_at"); timestamp(offer.offered_at, "offer offered_at");
       return { offer_id: offerId, card_id: offer.card_id, card_revision_id: revisionId };
     });
     ensurePrivateDir(stateDir);
@@ -494,21 +523,14 @@ export function createClient({ origin, token = "", stateDir, freshnessPath, tool
       // The file supplies the complete server schema. Do not add an event ID, change
       // visibility, wrap the card, or save another local copy of the candidate.
       const { data } = await request("/api/contributions", input);
-      const contributionId = responseId(data, "contribution", "contribution");
-      const state = data?.status ?? data?.state, visibility = data?.visibility;
-      if (!contributionId || !CONTRIBUTION_STATES.has(state) || !["private", "public"].includes(visibility)) throw new Error("Blaze returned an invalid contribution receipt");
-      return { contribution_id: contributionId, state, visibility };
+      const resource = contributionResponse(data);
+      return { contribution_id: resource.id, state: resource.status, visibility: resource.visibility };
     },
     async contribution(id) {
       if (!isResourceReference("contribution", id)) throw new Error("A server-issued contribution ID is required");
       const { data } = await request(`/api/contributions/${id}`);
-      const contribution_id = responseId(data, "contribution", "contribution");
-      const { visibility, created_at, updated_at } = plainObject(data) ? data : {};
-      const state = data?.status ?? data?.state;
-      if (!contribution_id || !CONTRIBUTION_STATES.has(state) || !["private", "public"].includes(visibility)) throw new Error("Blaze returned an invalid contribution status");
-      if (created_at !== undefined && (typeof created_at !== "string" || Number.isNaN(Date.parse(created_at)))) throw new Error("Blaze returned an invalid contribution timestamp");
-      if (updated_at !== undefined && (typeof updated_at !== "string" || Number.isNaN(Date.parse(updated_at)))) throw new Error("Blaze returned an invalid contribution timestamp");
-      return { contribution_id, state, visibility, created_at, updated_at };
+      const resource = contributionResponse(data, id);
+      return { contribution_id: resource.id, state: resource.status, visibility: resource.visibility, created_at: resource.created_at, updated_at: resource.updated_at, revoked_at: resource.revoked_at };
     },
     async deleteContribution(id) {
       if (!isResourceReference("contribution", id)) throw new Error("A server-issued contribution ID is required");
@@ -569,9 +591,11 @@ export function createClient({ origin, token = "", stateDir, freshnessPath, tool
         save(receiptPath(decisionId), saved); // Retries reuse the same event, timing and payload.
       }
       const { data } = await request("/api/outcomes", saved.outcome.payload);
-      if (data?.object !== undefined && (data.object !== "outcome" || !isResourceReference("outcome", data.id))) {
-        throw new Error("Blaze returned an invalid outcome receipt");
-      }
+      exactKeys(data, new Set(["id", "object", "created_at", "updated_at", "status", "lookup_id", "offer_id", "result", "verification", "timing", "summary_line"]), "Blaze outcome");
+      if (responseId(data, "outcome", "outcome") === null || !OUTCOME_STATUSES.has(data.status) || data.lookup_id !== decisionId
+        || data.offer_id !== (saved.outcome.payload.offer_id ?? null) || data.result !== saved.outcome.payload.result || !plainObject(data.verification)
+        || data.verification.status !== saved.outcome.payload.verification_status || typeof data.verification.evidence_grade !== "string" || !plainObject(data.timing)) throw new Error("Blaze returned an invalid outcome receipt");
+      timestamp(data.created_at, "outcome created_at"); timestamp(data.updated_at, "outcome updated_at");
       const summary = validSummary(data.summary_line)
         ? data.summary_line : fallbackSummary(saved.offered, saved.retrieval_ms);
       saved.outcome.summary_line = summary;
