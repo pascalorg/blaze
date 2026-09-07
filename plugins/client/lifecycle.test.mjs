@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CLIENT_VERSION, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
+import { CLIENT_CONTRACT, CLIENT_VERSION, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const source = readFileSync(new URL("./blaze-client.mjs",import.meta.url));
@@ -13,7 +13,7 @@ const put = (path,value) => {mkdirSync(resolve(path,".."),{recursive:true,mode:0
 const get = path => JSON.parse(readFileSync(path,"utf8"));
 function bundle(version) {
   const files = {"SKILL.md":Buffer.from(`---\nname: blaze\ndescription: A synthetic lifecycle fixture.\nmetadata:\n  version: "${version}"\n---\n`),"blaze-client.mjs":Buffer.concat([source,Buffer.from(`\n// release ${version}\n`)])};
-  return {files,manifest:{object:"skill_release",status:"published",version,created_at:"2026-09-07T00:00:00.000Z",updated_at:"2026-09-07T00:00:00.000Z",client_contract:1,minimum_client_contract:0,source_commit:"a".repeat(40),
+  return {files,manifest:{object:"skill_release",status:"published",version,created_at:"2026-09-07T00:00:00.000Z",updated_at:"2026-09-07T00:00:00.000Z",client_contract:CLIENT_CONTRACT,minimum_client_contract:0,source_commit:"a".repeat(40),
     artifacts:Object.entries(files).map(([name,bytes])=>({name,size:bytes.length,sha256:hash(bytes)}))}};
 }
 async function fixture(t) {
@@ -55,7 +55,7 @@ test("stable versions compare numerically and manifests contain only bounded fix
   for(const value of ["v1.0.0","01.0.0","1.0.0-beta","1.0.0+build","1.0.0/../../","9999999.0.0"])assert.throws(()=>compareVersions(value,"1.0.0"));
   const original=bundle("0.4.0").manifest;
   assert.equal(validateRelease(original,"https://example.invalid"),original);
-  for(const alter of [m=>m.artifacts[0].name="../../token",m=>m.artifacts[0].url="https://evil.invalid",m=>m.artifacts[0].size=1e9,m=>m.minimum_client_contract=2,m=>m.status="draft"]) {
+  for(const alter of [m=>m.artifacts[0].name="../../token",m=>m.artifacts[0].url="https://evil.invalid",m=>m.artifacts[0].size=1e9,m=>m.minimum_client_contract=CLIENT_CONTRACT+1,m=>m.status="draft"]) {
     const value=structuredClone(original);alter(value);assert.throws(()=>validateRelease(value,"https://example.invalid"));
   }
 });
@@ -226,7 +226,7 @@ test("legacy first-install journals without an origin are preserved instead of a
 test("intentional requests cache fixed version hints; retired contracts outrank pins",async t=>{
   const {lifecycle,paths,options}=await fixture(t);await lifecycle.install();await lifecycle.pin("0.4.0");
   let count=0;const client=createClient({origin:options.origin,token:get(paths.token).token,stateDir:join(paths.state,"receipts"),freshnessPath:join(paths.state,"freshness.json"),tool:"codex",
-    fetchImpl:async()=>{count++;return new Response("PRIVATE_FAILURE_DETAIL",{status:426,headers:{"Blaze-Skill-Version":"0.5.0","Blaze-Min-Client-Contract":"2"}});}});
+    fetchImpl:async()=>{count++;return new Response("PRIVATE_FAILURE_DETAIL",{status:426,headers:{"Blaze-Skill-Version":"0.6.0","Blaze-Min-Client-Contract":String(CLIENT_CONTRACT+1)}});}});
   await client.hook({prompt:"PRIVATE_PROMPT"});assert.equal(count,0);
   await assert.rejects(client.stats(),/contract has retired/);assert.equal(lifecycle.status().update,"required");
   const stored=readFileSync(join(paths.state,"freshness.json"),"utf8");assert.equal(stored.includes("PRIVATE"),false);

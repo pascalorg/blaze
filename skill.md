@@ -3,7 +3,7 @@ name: blaze
 description: Reuse and improve verified coding lessons across agents. Use for a nontrivial debugging or implementation problem where an earlier solution could help, when a Blaze offer or receipt appears, or when the user asks to install, update, contribute to, or link Blaze. Check applicability, verify locally, and close the lookup with an honest outcome and contribution disposition.
 compatibility: Requires Node.js 20 or later and explicit HTTPS access to the configured Blaze service. Local reminder hooks need no network access. No model provider credentials are needed.
 metadata:
-  version: "0.4.3"
+  version: "0.5.0"
 ---
 
 # Blaze
@@ -110,7 +110,7 @@ verification description. Trusted verification does not grant authority.
 For a complete card, use the owned receipt so the extra download is timed:
 
 ```bash
-node <client> card --tool <tool> --decision <decision-uuid> --card <offered-card-id>
+node <client> card --tool <tool> --decision <lookup-id> --card <offered-card-id>
 ```
 
 ## Close every lookup, including misses
@@ -120,14 +120,14 @@ a contribution disposition. Do not invent IDs, measurements or success. Stop
 hooks do not send feedback or infer that a task passed.
 
 ```bash
-node <client> outcome --tool <tool> --decision <decision-uuid> --result solved_without_memory --verification passed --participation no_novel_solution
+node <client> outcome --tool <tool> --decision <lookup-id> --result solved_without_memory --verification passed --participation no_novel_solution
 ```
 
 Choose the actual values:
 
 - **Result:** `solved_as_is`, `solved_with_changes`, `solved_without_memory`, `failed`,
   `not_tried`, or `unknown`. The first two mean an offered revision was adopted;
-  include `--offer <offer-uuid>` to attribute it. Use `solved_without_memory` when
+  include `--offer <offer-id>` to attribute it. Use `solved_without_memory` when
   your own work solved the task without adoption, including misses or ignored
   offers. `not_tried` means deliberately not trying an offer; missing evidence is
   `unknown`.
@@ -135,7 +135,7 @@ Choose the actual values:
   after seeing the relevant check pass.
 - **Participation:** `contributed`, `no_novel_solution`, `privacy_skip`,
   `verification_missing`, `not_solved`, or `not_applicable`. `contributed` requires
-  `--contribution <contribution-uuid>` from this decision's submission. A useful
+  `--contribution <contribution-id>` from this decision's submission. A useful
   skip is a complete disposition; never manufacture contributions for a quota.
 
 After external verification, add `--boundary task_start_to_verification_end`.
@@ -147,12 +147,12 @@ Retries preserve the original event, result and timing. If the outcome succeeded
 but the disposition needs retrying, send it separately:
 
 ```bash
-node <client> participation --tool <tool> --decision <decision-uuid> --status no_novel_solution
+node <client> participation --tool <tool> --decision <lookup-id> --status no_novel_solution
 ```
 
 Use the validated timing line from the helper in your final answer for that
 lookup unless a higher-priority format prevents it. If reporting fails,
-`node <client> summary --tool <tool> --decision <decision-uuid>` gives a local
+`node <client> summary --tool <tool> --decision <lookup-id>` gives a local
 fallback. With no receipt, all times are unknown:
 
 ```text
@@ -177,13 +177,13 @@ Contribution is separate from outcome feedback. Submit only within the user's
 authorized scope. Keep private code, identifiers and transcript text out of every
 candidate, including private ones. Privacy review is about exact content.
 
-Prepare a JSON envelope with a stable fresh UUID, the owned `decision_id` when
+Prepare a JSON envelope with a stable fresh `event_` ID, the owned `decision_id` when
 present, and the lesson. It must fit within 32 KiB. Preserve its exact bytes and
 event ID for retries. This example is a shape, not a candidate to submit unchanged:
 
 ```json
 {
-  "client_event_id": "92a5ad18-e9e6-4db4-8a28-8a8b33567691",
+  "client_event_id": "event_0123456789AbCdEf",
   "minimized": true,
   "visibility": "private",
   "public_sharing_authorized": false,
@@ -199,7 +199,7 @@ event ID for retries. This example is a shape, not a candidate to submit unchang
 ```
 
 When deriving a lesson from retrieved offers, include every used owned offer in
-`source_offer_ids` (at most eight distinct UUIDs). These reference exact source
+`source_offer_ids` (at most eight distinct offer IDs). These reference exact source
 revisions, not a title or another installation's offer. Public candidates cannot
 cite private sources. Optional card fields are bounded `keywords`, `pitfalls`
 with `text`, and `context_fingerprint.frameworks` with public `name` and optional
@@ -207,7 +207,7 @@ with `text`, and `context_fingerprint.frameworks` with public `name` and optiona
 
 ```bash
 node <client> contribute --tool <tool> --file <reviewed-envelope.json>
-node <client> contribution --tool <tool> --id <contribution-uuid>
+node <client> contribution --tool <tool> --id <contribution-id>
 ```
 
 Attach the returned ID to this decision's `contributed` disposition. Submission
@@ -228,7 +228,7 @@ cards; they cannot publish a candidate or create independent trust.
 For an authorized erasure request:
 
 ```bash
-node <client> delete-contribution --tool <tool> --id <contribution-uuid>
+node <client> delete-contribution --tool <tool> --id <contribution-id>
 ```
 
 Hosted reads deny an erased source and its derived lineage immediately; payload

@@ -7,12 +7,54 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const ID_LENGTH = 16;
+const ID_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+export const ID_PREFIXES = {
+  card: "card", card_revision: "card_revision", card_variant: "card_variant", card_framework: "card_framework",
+  deprecation: "deprecation", lookup: "lookup", lookup_trace: "lookup_trace", offer: "offer", outcome: "outcome",
+  session: "session", install: "installation", project: "project", claim_code: "claim_challenge",
+  claim: "installation_claim", contribution: "contribution", family: "problem_group", participation: "participation",
+  verification: "verification", verification_withdrawal: "verification_withdrawal", publication: "publication",
+  problem: "problem", problem_revision: "problem_revision", embedding_model: "embedding_model", embedding: "embedding",
+  retrieval_profile: "retrieval_profile", experiment: "experiment", experiment_run: "experiment_run",
+  observation: "observation", job: "job", policy_evaluation: "policy_evaluation", event: "event",
+  webhook_endpoint: "webhook_endpoint", webhook_delivery: "webhook_delivery", org: "organization",
+  member: "membership", user: "user", agent: "agent", agent_host: "agent_host",
+  protocol_agent: "agent_registration", capability_grant: "capability_grant", api_key: "api_key",
+  auth_session: "auth_session", auth_account: "auth_account", auth_verification: "auth_verification", request: "request",
+};
+export const LEGACY_ID_PREFIXES = {
+  card_framework: ["cfw"], deprecation: ["dep"], lookup: ["lkp"], offer: ["ofr"], session: ["ses"],
+  install: ["inst"], project: ["prj"], claim_code: ["clc"], claim: ["clm"], contribution: ["con"],
+  family: ["fam"], participation: ["ptc"], verification: ["ver"], verification_withdrawal: ["wdr"],
+  event: ["evt"], webhook_endpoint: ["we"], webhook_delivery: ["wd"], org: ["org"], member: ["member"],
+  agent: ["agt"], protocol_agent: ["agt"], agent_host: ["host"], capability_grant: ["grt"], api_key: ["key"],
+  auth_session: ["sess"], request: ["req"],
+};
+export const LEGACY_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const idPattern = prefix => new RegExp(`^${prefix}_[0-9A-Za-z]{${ID_LENGTH}}$`);
+export const isIdFor = (resource, value) => typeof value === "string" && idPattern(ID_PREFIXES[resource]).test(value);
+export function isResourceReference(resource, value) {
+  return isIdFor(resource, value) || (typeof value === "string" && (LEGACY_UUID_PATTERN.test(value)
+    || (LEGACY_ID_PREFIXES[resource] ?? []).some(prefix => idPattern(prefix).test(value))));
+}
+export function createId(resource) {
+  const prefix = ID_PREFIXES[resource];
+  if (!prefix) throw new Error("Unknown Blaze resource type");
+  let suffix = "";
+  while (suffix.length < ID_LENGTH) {
+    for (const byte of randomBytes(ID_LENGTH)) {
+      if (byte < 248) suffix += ID_ALPHABET[byte % ID_ALPHABET.length];
+      if (suffix.length === ID_LENGTH) break;
+    }
+  }
+  return `${prefix}_${suffix}`;
+}
 const TOKEN = /^blz_[A-Za-z0-9_-]{43}$/;
 const CARD_ID = /^[a-z0-9][a-z0-9-]{2,62}$/;
 const DEFAULT_ORIGIN = "https://blaze.pascal.app";
-export const CLIENT_VERSION = "0.4.3";
-export const CLIENT_CONTRACT = 1;
+export const CLIENT_VERSION = "0.5.0";
+export const CLIENT_CONTRACT = 2;
 export const CLIENT_TOOLS = ["claude", "codex", "opencode", "cursor", "openclaw", "agent"];
 const RELEASE_FILES = ["SKILL.md", "blaze-client.mjs"];
 const LEGACY_RELEASE_HASHES = {
@@ -140,6 +182,13 @@ function exactKeys(value, allowed, label) {
   for (const key of Object.keys(value)) if (!allowed.has(key)) throw new Error(`${label} contains an unsupported field`);
 }
 
+function responseId(value, resource, legacyField, object) {
+  if (!plainObject(value)) return null;
+  if (value.object !== undefined && value.object !== object) return null;
+  const id = value.id ?? value[legacyField];
+  return isResourceReference(resource, id) ? id : null;
+}
+
 function safeConcept(text, label, maximum = 400, minimum = 8) {
   if (typeof text !== "string") throw new Error(`${label} must be text`);
   if (/[\r\n\t]/.test(text)) throw new Error(`${label} must be one line of conceptual text`);
@@ -155,12 +204,12 @@ export function validateLookupInput(value, tool) {
   toolPaths(tool);
   const input = {
     query: safeConcept(value.query, "Lookup query", 400),
-    client_event_id: value.client_event_id ?? randomUUID(),
+    client_event_id: value.client_event_id ?? createId("event"),
     tool: ["claude", "codex", "opencode"].includes(tool) ? tool : "api",
     minimized: true,
     privacy: { version: 1, intent: "conceptual" },
   };
-  if (!UUID.test(input.client_event_id)) throw new Error("Lookup client_event_id must be a UUID");
+  if (!isResourceReference("event", input.client_event_id)) throw new Error("Lookup client_event_id must be an event ID");
   if (value.context_fingerprint !== undefined) {
     if (!/^[a-f0-9]{64}$/i.test(value.context_fingerprint)) throw new Error("context_fingerprint must be a SHA-256 digest");
     input.context_fingerprint = value.context_fingerprint.toLowerCase();
@@ -195,11 +244,11 @@ export function validateLookupInput(value, tool) {
 
 function validateContribution(input) {
   exactKeys(input, new Set(["client_event_id", "minimized", "visibility", "public_sharing_authorized", "decision_id", "source_offer_ids", "card"]), "Contribution");
-  if (!UUID.test(input.client_event_id ?? "") || input.minimized !== true) throw new Error("Contribution JSON requires a stable client_event_id UUID and minimized: true");
-  if (input.decision_id !== undefined && !UUID.test(input.decision_id)) throw new Error("Contribution decision_id must be an owned decision UUID");
+  if (!isResourceReference("event", input.client_event_id) || input.minimized !== true) throw new Error("Contribution JSON requires a stable client_event_id and minimized: true");
+  if (input.decision_id !== undefined && !isResourceReference("lookup", input.decision_id)) throw new Error("Contribution decision_id must be an owned lookup ID");
   if (input.source_offer_ids !== undefined && (!Array.isArray(input.source_offer_ids) || input.source_offer_ids.length > 8
-    || input.source_offer_ids.some(id => typeof id !== "string" || !UUID.test(id))
-    || new Set(input.source_offer_ids).size !== input.source_offer_ids.length)) throw new Error("Sources must be at most eight distinct owned offer UUIDs");
+    || input.source_offer_ids.some(id => !isResourceReference("offer", id))
+    || new Set(input.source_offer_ids).size !== input.source_offer_ids.length)) throw new Error("Sources must be at most eight distinct owned offer IDs");
   if (input.visibility !== undefined && !["private", "public"].includes(input.visibility)) throw new Error("Contribution visibility must be private or public");
   if (input.visibility === "public" && input.public_sharing_authorized !== true) throw new Error("Public sharing requires the user's explicit authorization and public_sharing_authorized: true");
   exactKeys(input.card, new Set(["id", "title", "trigger", "problem_statement", "procedure", "verification", "keywords", "pitfalls", "context_fingerprint"]), "Contribution card");
@@ -242,8 +291,9 @@ function untrustedReference(value) {
 
 /** Validate the documented full-card response and serialize it into inert text. */
 function cardReferenceText(data, expected) {
-  exactKeys(data, new Set(["id", "variant", "revision_id", "card"]), "Blaze card");
-  if (data.id !== expected.cardId || data.revision_id !== expected.revisionId) throw new Error("Blaze returned a card outside the requested offer");
+  exactKeys(data, new Set(["id", "object", "created_at", "updated_at", "variant", "card_revision_id", "revision_id", "card"]), "Blaze card");
+  const revisionId = data.card_revision_id ?? data.revision_id;
+  if ((data.object !== undefined && data.object !== "card") || data.id !== expected.cardId || revisionId !== expected.revisionId) throw new Error("Blaze returned a card outside the requested offer");
   if (data.variant !== null && (typeof data.variant !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(data.variant))) {
     throw new Error("Blaze returned an invalid card variant");
   }
@@ -285,7 +335,7 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
   const base = url.origin;
   toolPaths(tool); // Validate before constructing endpoint paths or commands.
   const receiptPath = (id) => {
-    if (!UUID.test(id)) throw new Error("A server-issued decision UUID is required");
+    if (!isResourceReference("lookup", id)) throw new Error("A server-issued lookup ID is required");
     return join(stateDir, `${id}.json`);
   };
   const receipt = (id) => {
@@ -312,8 +362,8 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: AbortSignal.timeout(4500), redirect: "error",
     });
-    const rawId = response.headers.get("x-blaze-request-id");
-    const requestId = UUID.test(rawId ?? "") ? rawId : null;
+    const rawId = response.headers.get("x-blaze-request-id") ?? response.headers.get("request-id");
+    const requestId = isResourceReference("request", rawId) ? rawId : null;
     // Only fixed public release hints, learned from an already-intentional request.
     // These never download or execute a new client and hooks never reach this code.
     if (freshnessPath) {
@@ -326,8 +376,13 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
       } catch { /* Invalid advisory metadata must not break useful work. */ }
     }
     if (!response.ok) {
-      // Error bodies are untrusted and may contain secrets or proxy HTML. Never echo them.
-      await response.body?.cancel();
+      // Error messages and arbitrary server fields are untrusted. Retain only a bounded machine code.
+      let errorCode = null;
+      try {
+        const errorBody = await boundedJson(response, requestId);
+        const candidate = plainObject(errorBody?.error) ? errorBody.error.code : null;
+        if (typeof candidate === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(candidate)) errorCode = candidate;
+      } catch { /* Invalid error bodies never enter diagnostics. */ }
       let message = `Blaze request failed (HTTP ${response.status}).`;
       if (response.status === 401) message += " Repair or replace this installation's token; do not retry anonymously.";
       if (response.status === 426) message += " This client contract has retired. Check the release and update through the owning skill manager; keep the credential and receipts.";
@@ -345,6 +400,7 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
         }
         message += ` Retry in ${retryAfter}s; keep the same installation and event IDs.`;
       }
+      if (errorCode) message += ` Code: ${errorCode}.`;
       if (requestId) message += ` Request: ${requestId}.`;
       throw new Error(message);
     }
@@ -353,7 +409,7 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
     return { data, elapsed };
   }
   function context(response, saved, event) {
-    const source = response.additionalContext ?? response.hookSpecificOutput?.additionalContext ?? response.offer ?? "";
+    const source = response.context ?? response.additionalContext ?? response.hookSpecificOutput?.additionalContext ?? response.offer ?? "";
     const command = `node ${shellQuote(helperPath)} outcome --tool ${tool} --decision ${saved.decision_id} --result unknown --verification unknown`;
     const note = [
       `Blaze measured full request/reply retrieval: ${seconds(saved.retrieval_ms)}. Decision: ${saved.decision_id}.`,
@@ -373,19 +429,29 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
     const input = validateLookupInput(body, tool);
     const clientEventId = input.client_event_id;
     const { data, elapsed } = await request("/api/lookup", input);
-    const decision = data.blaze ?? data;
-    if (!plainObject(decision) || !UUID.test(decision.decision_id ?? "") || typeof decision.offered !== "boolean") throw new Error("Blaze returned an invalid decision");
-    if (!Array.isArray(decision.offers) || decision.offers.length > 8) throw new Error("Blaze returned an invalid offer list");
-    const offers = decision.offers.map((offer) => {
-      exactKeys(offer, new Set(["offer_id", "card_id", "revision_id", "baseline"]), "Blaze offer");
-      if (!UUID.test(offer.offer_id ?? "") || !UUID.test(offer.revision_id ?? "") || !CARD_ID.test(offer.card_id ?? "")) throw new Error("Blaze returned an invalid offer identifier");
-      return { offer_id: offer.offer_id, card_id: offer.card_id, revision_id: offer.revision_id };
+    const decision = data?.object === "lookup" ? data : data?.blaze ?? data;
+    const decisionId = responseId(decision, "lookup", "decision_id", "lookup");
+    if (!decisionId || typeof decision.offered !== "boolean") throw new Error("Blaze returned an invalid decision");
+    const offerList = decision.object === "lookup" ? decision.offers?.data : decision.offers;
+    if (decision.object === "lookup") {
+      exactKeys(decision.offers, new Set(["object", "data", "has_more", "next_cursor"]), "Blaze offer list");
+      if (decision.offers.object !== "list" || decision.offers.has_more !== false || decision.offers.next_cursor !== null) throw new Error("Blaze returned an invalid offer list");
+    }
+    if (!Array.isArray(offerList) || offerList.length > 8) throw new Error("Blaze returned an invalid offer list");
+    const offers = offerList.map((offer) => {
+      exactKeys(offer, new Set(["id", "object", "created_at", "updated_at", "offer_id", "lookup_id", "decision_id", "card_id", "card_revision_id", "revision_id", "baseline", "rank", "score"]), "Blaze offer");
+      const offerId = responseId(offer, "offer", "offer_id", "offer");
+      const revisionId = offer.card_revision_id ?? offer.revision_id;
+      if (!offerId || !isResourceReference("card_revision", revisionId) || !CARD_ID.test(offer.card_id ?? "")) throw new Error("Blaze returned an invalid offer identifier");
+      if (offer.lookup_id !== undefined && offer.lookup_id !== decisionId) throw new Error("Blaze returned an offer for another lookup");
+      if (offer.decision_id !== undefined && offer.decision_id !== decisionId) throw new Error("Blaze returned an offer for another lookup");
+      return { offer_id: offerId, card_id: offer.card_id, revision_id: revisionId };
     });
     ensurePrivateDir(stateDir);
-    const path = receiptPath(decision.decision_id);
+    const path = receiptPath(decisionId);
     const prior = load(path);
     const saved = prior?.origin === base && prior?.tool === tool ? prior : {
-      version: 1, origin: base, tool, decision_id: decision.decision_id,
+      version: 2, origin: base, tool, decision_id: decisionId,
       client_event_id: clientEventId, started_wall_ms: started, retrieval_ms: 0,
       offered: decision.offered === true,
       offers,
@@ -399,8 +465,8 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
     exactKeys(input, new Set(["status", "contribution_id"]), "Participation");
     if (!PARTICIPATION_STATUSES.has(input.status)) throw new Error("Choose an explicit contribution disposition");
     const contributionId = input.contribution_id ?? null;
-    if ((input.status === "contributed") !== (contributionId !== null) || (contributionId !== null && !UUID.test(contributionId))) {
-      throw new Error("Contributed status requires an owned contribution UUID");
+    if ((input.status === "contributed") !== (contributionId !== null) || (contributionId !== null && !isResourceReference("contribution", contributionId))) {
+      throw new Error("Contributed status requires an owned contribution ID");
     }
     return { status: input.status, contribution_id: contributionId };
   }
@@ -410,7 +476,7 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
     const contributionId = body.contribution_id;
     const { data } = await request(`/api/decisions/${decisionId}/participation`, body, "PUT");
     exactKeys(data, new Set(["id", "object", "decision_id", "status", "contribution_id", "created_at", "updated_at"]), "Participation response");
-    if (!/^ptc_[0-9A-Za-z]{16}$/.test(data.id ?? "") || data.object !== "participation" || data.decision_id !== decisionId
+    if (!isResourceReference("participation", data.id) || data.object !== "participation" || data.decision_id !== decisionId
       || data.status !== body.status || data.contribution_id !== contributionId
       || ![data.created_at, data.updated_at].every(t => typeof t === "string" && Number.isFinite(Date.parse(t)))) {
       throw new Error("Blaze returned an invalid participation receipt");
@@ -445,22 +511,27 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
       // The file supplies the complete server schema. Do not add an event ID, change
       // visibility, wrap the card, or save another local copy of the candidate.
       const { data } = await request("/api/contributions", input);
-      if (!UUID.test(data?.contribution_id ?? "") || !CONTRIBUTION_STATES.has(data.state) || !["private", "public"].includes(data.visibility)) throw new Error("Blaze returned an invalid contribution receipt");
-      return { contribution_id: data.contribution_id, state: data.state, visibility: data.visibility };
+      const contributionId = responseId(data, "contribution", "contribution_id", "contribution");
+      const state = data?.status ?? data?.state, visibility = data?.visibility;
+      if (!contributionId || !CONTRIBUTION_STATES.has(state) || !["private", "public"].includes(visibility)) throw new Error("Blaze returned an invalid contribution receipt");
+      return { contribution_id: contributionId, state, visibility };
     },
     async contribution(id) {
-      if (!UUID.test(id ?? "")) throw new Error("A server-issued contribution UUID is required");
+      if (!isResourceReference("contribution", id)) throw new Error("A server-issued contribution ID is required");
       const { data } = await request(`/api/contributions/${id}`);
-      const { id: contribution_id, state, visibility, created_at, updated_at } = data;
-      if (!UUID.test(contribution_id ?? "") || !CONTRIBUTION_STATES.has(state) || !["private", "public"].includes(visibility)) throw new Error("Blaze returned an invalid contribution status");
+      const contribution_id = responseId(data, "contribution", "contribution_id", "contribution");
+      const { visibility, created_at, updated_at } = plainObject(data) ? data : {};
+      const state = data?.status ?? data?.state;
+      if (!contribution_id || !CONTRIBUTION_STATES.has(state) || !["private", "public"].includes(visibility)) throw new Error("Blaze returned an invalid contribution status");
       if (created_at !== undefined && (typeof created_at !== "string" || Number.isNaN(Date.parse(created_at)))) throw new Error("Blaze returned an invalid contribution timestamp");
       if (updated_at !== undefined && (typeof updated_at !== "string" || Number.isNaN(Date.parse(updated_at)))) throw new Error("Blaze returned an invalid contribution timestamp");
       return { contribution_id, state, visibility, created_at, updated_at };
     },
     async deleteContribution(id) {
-      if (!UUID.test(id ?? "")) throw new Error("A server-issued contribution UUID is required");
+      if (!isResourceReference("contribution", id)) throw new Error("A server-issued contribution ID is required");
       const { data } = await request(`/api/contributions/${id}`, undefined, "DELETE");
-      if (data?.deleted !== true) throw new Error("Blaze returned an invalid contribution deletion receipt");
+      if (data?.deleted !== true || (data.object !== undefined && data.object !== "contribution")
+        || (data.id !== undefined && !isResourceReference("contribution", data.id))) throw new Error("Blaze returned an invalid contribution deletion receipt");
       return { deleted: true };
     },
     async hook(body) {
@@ -478,7 +549,7 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
       if (!CARD_ID.test(cardId ?? "")) throw new Error("A valid offered card ID is required");
       const saved = receipt(decisionId);
       const offer = saved.offers.find((o) => o.card_id === cardId);
-      if (!offer || !UUID.test(offer.offer_id ?? "")) throw new Error("Card was not offered for this decision");
+      if (!offer || !isResourceReference("offer", offer.offer_id)) throw new Error("Card was not offered for this decision");
       if (saved.outcome) throw new Error("Outcome already prepared; start a new lookup for new work");
       const { data, elapsed } = await request(`/api/cards/${encodeURIComponent(cardId)}?offer_id=${encodeURIComponent(offer.offer_id)}`);
       const reference = untrustedReference(cardReferenceText(data, { cardId, revisionId: offer.revision_id }));
@@ -491,7 +562,7 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
       const disposition = report.participation === undefined ? null : participationBody({
         status:report.participation,...(report.contribution_id ? {contribution_id:report.contribution_id} : {}),
       });
-      if (!disposition && report.contribution_id !== undefined) throw new Error("Choose contributed status with the contribution UUID");
+      if (!disposition && report.contribution_id !== undefined) throw new Error("Choose contributed status with the contribution ID");
       if (!RESULTS.has(report.result) || !VERIFICATIONS.has(report.verification_status)) throw new Error("Choose an explicit result and verification status");
       const boundary = report.boundary ?? "task_start_to_agent_end";
       if (!BOUNDARIES.has(boundary)) throw new Error("Unknown timing boundary");
@@ -509,13 +580,16 @@ export function createClient({ origin, token = "", stateDir, legacyStateDir, fre
         const elapsed = wallNow() - saved.started_wall_ms;
         const total = report.task_total_ms ?? elapsed;
         if (report.task_total_ms !== undefined && !positiveDuration(report.task_total_ms)) throw new Error("Invalid task duration");
-        const payload = { decision_id: decisionId, client_event_id: report.client_event_id ?? randomUUID(),
+        const payload = { decision_id: decisionId, client_event_id: report.client_event_id ?? createId("event"),
           ...intent, retrieval_ms: saved.retrieval_ms,
           ...(positiveDuration(total) && total >= saved.retrieval_ms ? { task_total_ms: total } : {}) };
         saved.outcome = { intent, payload };
         save(receiptPath(decisionId), saved); // Retries reuse the same event, timing and payload.
       }
       const { data } = await request("/api/outcomes", saved.outcome.payload);
+      if (data?.object !== undefined && (data.object !== "outcome" || !isResourceReference("outcome", data.id))) {
+        throw new Error("Blaze returned an invalid outcome receipt");
+      }
       const summary = validSummary(data.summary_line)
         ? data.summary_line : fallbackSummary(saved.offered, saved.retrieval_ms);
       saved.outcome.summary_line = summary;
@@ -667,7 +741,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
     if (value.pin !== null) compareVersions(value.pin, CLIENT_VERSION);
     if (value.previous !== null) {
       exactKeys(value.previous,new Set(["id","release"]),"Previous installation");
-      if (!UUID.test(value.previous.id ?? "")) throw new Error("Invalid previous installation");
+      if (!LEGACY_UUID_PATTERN.test(value.previous.id ?? "")) throw new Error("Invalid previous installation");
       if (value.previous.release !== null) validateRelease(value.previous.release,base);
     }
     return value;
@@ -753,7 +827,8 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
       if (pending.version!==1 || pending.origin!==base || !TOKEN.test(pending.token ?? "")) throw new Error("Pending registration belongs to another service or is invalid");
       save(pendingPath,pending);
       const data = parseJSON(await bytes("/api/install",16*1024,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${pending.token}`},body:JSON.stringify({tool})}));
-      if (!TOKEN.test(data?.token ?? "") || !UUID.test(data?.install_id ?? "") || data.bootstrap_contract!==2 || data.token!==pending.token) {
+      const installId = responseId(data, "install", "install_id", "installation");
+      if (!TOKEN.test(data?.token ?? "") || !installId || data.bootstrap_contract!==2 || data.token!==pending.token) {
         throw new Error("This service does not support retryable registration; keep the saved pending credential");
       }
       save(paths.token,{version:1,origin:base,token:pending.token});unlinkSync(pendingPath);
@@ -763,7 +838,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
   function recover() {
     const journal = loadRequiredIfPresent(journalPath); if (!journal) return;
     exactKeys(journal,new Set(journal.version===2 ? ["version","id","origin","release","prior"] : ["version","id","release","prior"]),"Activation journal");
-    if (![1,2].includes(journal.version) || !UUID.test(journal.id ?? "")) throw new Error("Invalid activation journal");
+    if (![1,2].includes(journal.version) || !LEGACY_UUID_PATTERN.test(journal.id ?? "")) throw new Error("Invalid activation journal");
     const next = validateRelease(journal.release,base);
     const prior = validateMetadata(journal.prior);
     const recordedOrigin = journal.version===2 ? trustedOrigin(journal.origin) : prior?.origin;
@@ -799,7 +874,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
         if (!current || current.until<value.until) save(destination,value);
         continue;
       }
-      if (!name.endsWith(".json") || !UUID.test(name.slice(0,-5)) || !value || value.version!==1
+      if (!name.endsWith(".json") || !isResourceReference("lookup",name.slice(0,-5)) || !value || value.version!==1
         || value.decision_id!==name.slice(0,-5) || value.origin!==base || !CLIENT_TOOLS.includes(value.tool)
         || toolPaths(value.tool,home).root!==paths.root) throw new Error("Invalid legacy receipt; preserve it before updating");
       exactKeys(value,new Set(["version","origin","tool","decision_id","client_event_id","started_wall_ms","retrieval_ms","offered","offers","context_fingerprint","outcome","participation"]),"Legacy receipt");
@@ -882,7 +957,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
       homePath(home,paths.root);homePath(home,bundleState);
       return locked(join(bundleState,"update.lock"),async()=>{
         recover();const meta = metadata();
-        if (!ownedInvocation(meta) || !UUID.test(meta.previous?.id ?? "") || !meta.previous.release) throw new Error("No compatible managed release is available for rollback");
+        if (!ownedInvocation(meta) || !LEGACY_UUID_PATTERN.test(meta.previous?.id ?? "") || !meta.previous.release) throw new Error("No compatible managed release is available for rollback");
         const previous = validateRelease(meta.previous.release,base), backup = join(bundleState,"backups",meta.previous.id);
         if (!verifyBundle(paths.root,meta.release) || !verifyBundle(backup,previous)) throw new Error("Rollback bundle was modified");
         const id = randomUUID(), stage = join(bundleState,"staging",id);

@@ -1,7 +1,7 @@
 {
-  "version": "0.4.3",
-  "created_at": "2026-09-07T17:52:20.000Z",
-  "updated_at": "2026-09-07T17:52:20.000Z",
-  "client_contract": 1,
+  "version": "0.5.0",
+  "created_at": "2026-09-07T19:27:29.000Z",
+  "updated_at": "2026-09-07T19:27:29.000Z",
+  "client_contract": 2,
   "minimum_client_contract": 0
 }

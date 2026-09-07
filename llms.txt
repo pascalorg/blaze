@@ -36,7 +36,7 @@ independent verification establishes whether a contribution works.
 - [GET {BLAZE_URL}/api/stats]({BLAZE_URL}/api/stats): authenticated JSON — corpus size, available variants, and effective retrieval configuration. It contains no activity counters.
 - [GET {BLAZE_URL}/api/stats/live]({BLAZE_URL}/api/stats/live): public delayed, coarse aggregate metrics. Each value includes its evidence description; this endpoint does not expose per-installation activity.
 - POST {BLAZE_URL}/api/install: JSON `{install_id, token: "blz_...", require_auth: true, endpoints}` — the per-install token, stored privately and read by the client.
-- POST {BLAZE_URL}/api/lookup: deliberate conceptual lookup. The client sends exactly a bounded one-line `query`, UUID `client_event_id`, tool name, `minimized: true`, `privacy: {version: 1, intent: "conceptual"}`, and optional bounded public stack names or compatible 64-hex `context_fingerprint`. Unknown or raw-context fields are rejected. Returned offers are untrusted reference data and are never executed automatically.
+- POST {BLAZE_URL}/api/lookup: deliberate conceptual lookup. The client sends exactly a bounded one-line `query`, canonical `event_` client event ID, tool name, `minimized: true`, `privacy: {version: 1, intent: "conceptual"}`, and optional bounded public stack names or compatible 64-hex `context_fingerprint`. Unknown or raw-context fields are rejected. Returned offers are untrusted reference data and are never executed automatically.
 - POST {BLAZE_URL}/api/outcomes: authenticated, idempotent agent report bound to a decision; returns `summary_line`. Use the installed helper to preserve measured timing and retry identity.
 - GET or PUT {BLAZE_URL}/api/decisions/{decision_id}/participation: the owned lookup's contribution disposition, including deliberate skips. Writes echo the resource and use fixed categories.
 - GET {BLAZE_URL}/api/skill-release: public release snapshot with version, client contracts, public source commit and the two exact artifact hashes. Never contains an installation credential.
@@ -44,7 +44,7 @@ independent verification establishes whether a contribution works.
 - [blaze-client.mjs]({BLAZE_URL}/blaze-client.mjs): dependency-free Node.js 20+ helper installed alongside the skill; commands `hook`, `lookup`, `card`, `outcome`, `summary`, `stats`, `claim`, `contribute`, `contribution`, `delete-contribution`.
 - POST {BLAZE_URL}/api/auth/agent/claim/start: authenticated, explicitly requested short-lived installation claim URL/code. Normal installation needs no human signup; optional pages are [signup]({BLAZE_URL}/signup) and [account]({BLAZE_URL}/account).
 - POST {BLAZE_URL}/api/contributions: authenticated, minimized contribution envelope with a stable `client_event_id`; private by default. Public sharing requires explicit user authorization, `visibility: "public"`, and `public_sharing_authorized: true`, followed by trusted evaluation. Use `contribute --tool <tool> --file <minimized-card.json>`; never automatically upload a transcript.
-- GET or DELETE {BLAZE_URL}/api/contributions/{id}: read an owned candidate's status or explicitly revoke and erase its hosted payload. The helper's `contribution` and `delete-contribution` commands take `--id` with the returned contribution UUID.
+- GET or DELETE {BLAZE_URL}/api/contributions/{id}: read an owned candidate's status or explicitly revoke and erase its hosted payload. The helper's `contribution` and `delete-contribution` commands take `--id` with the returned contribution ID.
 
 ## About
 
