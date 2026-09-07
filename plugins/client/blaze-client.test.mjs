@@ -92,7 +92,7 @@ async function fixture(t, options = {}) {
         ? {id:options.wrongLookupPrefix ? canonicalIds.offer : canonicalIds.lookup,object:"lookup",
           status:"completed",created_at:"2026-09-07T00:00:00Z",updated_at:"2026-09-07T00:00:00Z",decided_at:"2026-09-07T00:00:00Z",context:"canonical lookup context",
           offers:{object:"list",data:options.offered === false ? [] : Array.from({length:options.offerCount ?? 1},(_,i)=>({id:i?createId("offer"):canonicalIds.offer,object:"offer",created_at:"2026-09-07T00:00:00Z",updated_at:"2026-09-07T00:00:00Z",status:"offered",offered_at:"2026-09-07T00:00:00Z",lookup_id:canonicalIds.lookup,card_id:`card_0123456789AbCdE${String.fromCharCode(102+i)}`,card_revision_id:i?createId("card_revision"):canonicalIds.revision,baseline:null})),has_more:false,next_cursor:null},
-          timing:{server_lookup_ms:12},policy:{version:1},context_fingerprint:null,retrieval:{mode:"lexical",variant:"default",candidate_count:1}}
+          timing:{server_lookup_ms:12},policy:{version:"2026-09-07"},context_fingerprint:null,retrieval:{mode:"lexical",variant:"default",candidate_count:1}}
         : { decision_id: randomUUID(), offered: options.offered ?? true,
           offers: options.offered === false ? [] : Array.from({length: options.offerCount ?? 1}, (_, i) => ({ offer_id: createId("offer"), card_id: `card_0123456789AbCdE${String.fromCharCode(102+i)}`, revision_id: randomUUID(), baseline: null })) };
       decisions.set(body.client_event_id, decision);
