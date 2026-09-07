@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
+import { CLIENT_VERSION, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const source = readFileSync(new URL("./blaze-client.mjs",import.meta.url));
@@ -91,7 +91,7 @@ test("update, pin, rollback and uninstall preserve receipts and one credential",
   await lifecycle.pin("0.4.0");control.release=bundle("0.5.0");
   assert.equal((await lifecycle.checkUpdate()).update,"pinned");await assert.rejects(lifecycle.update(),/pinned/);
   await lifecycle.pin(null);assert.equal((await lifecycle.update()).version,"0.5.0");
-  assert.equal(lifecycle.status().disk_version,"0.5.0");assert.equal(lifecycle.status().running_version,"0.4.0");
+  assert.equal(lifecycle.status().disk_version,"0.5.0");assert.equal(lifecycle.status().running_version,CLIENT_VERSION);
   assert.equal((await lifecycle.rollback()).version,"0.4.0");assert.equal(lifecycle.status().pin,"0.4.0");
   assert.deepEqual(get(join(paths.state,"receipts",`${id}.json`)),receipt);assert.equal(readFileSync(paths.token,"utf8"),secret);
   assert.equal((await lifecycle.uninstall()).installation,"removed");assert.equal(existsSync(paths.root),false);
@@ -157,6 +157,40 @@ test("one bundle lock spans tools that share a discovery directory",async t=>{
   const {lifecycle,state,options,requests}=await fixture(t);await lifecycle.install();
   put(join(state,"update.lock"),{pid:process.pid,nonce:randomUUID()});const count=requests.length;
   await assert.rejects(createLifecycle({...options,tool:"cursor"}).update(),/Another Blaze operation/);assert.equal(requests.length,count);
+});
+
+test("a host discovering another recorded global bundle uses that bundle's pin and lock while retaining its own identity",async t=>{
+  const {lifecycle,state,options,paths,control,requests}=await fixture(t);await lifecycle.install();
+  const otherPaths=toolPaths("opencode",options.home);
+  const dedicated=createLifecycle({...options,tool:"opencode",helperPath:join(otherPaths.root,"blaze-client.mjs")});
+  await dedicated.install();
+  const credentials=[paths.token,otherPaths.token].map(path=>readFileSync(path,"utf8"));
+  const receiptId=randomUUID(),receipt={decision_id:receiptId};put(join(otherPaths.state,"receipts",`${receiptId}.json`),receipt);
+  const discovered=createLifecycle({...options,tool:"opencode"});
+  assert.equal(discovered.status().installation,"direct");
+  await discovered.pin("0.4.0");assert.equal(lifecycle.status().pin,"0.4.0");assert.equal(dedicated.status().pin,null);
+  control.release=bundle("0.5.0");await assert.rejects(discovered.update(),/pinned/);await discovered.pin(null);
+  put(join(state,"update.lock"),{pid:process.pid,nonce:randomUUID()});const before=requests.length;
+  await assert.rejects(discovered.update(),/Another Blaze operation/);assert.equal(requests.length,before);rmSync(join(state,"update.lock"));
+  assert.equal((await discovered.update()).version,"0.5.0");
+  assert.equal(lifecycle.status().disk_version,"0.5.0");assert.equal(dedicated.status().disk_version,"0.4.0");
+  assert.deepEqual([paths.token,otherPaths.token].map(path=>readFileSync(path,"utf8")),credentials);
+  assert.notEqual(get(paths.token).token,get(otherPaths.token).token);
+  assert.deepEqual(get(join(otherPaths.state,"receipts",`${receiptId}.json`)),receipt);
+});
+
+test("an unrecorded global copy cannot update a host's different recorded installation",async t=>{
+  const {options,requests}=await fixture(t),paths=toolPaths("opencode",options.home);
+  await createLifecycle({...options,tool:"opencode",helperPath:join(paths.root,"blaze-client.mjs")}).install();
+  const before=requests.length,unrecorded=createLifecycle({...options,tool:"opencode"});
+  assert.equal((await unrecorded.update()).installation,"managed_or_unrecorded");assert.equal(requests.length,before);
+});
+
+test("cross-host discovery preserves origin and symlink checks on recorded ownership",async t=>{
+  const {lifecycle,options,state,requests}=await fixture(t);await lifecycle.install();const before=requests.length;
+  assert.throws(()=>createLifecycle({...options,tool:"opencode",origin:"https://example.invalid"}).status(),/provenance/);
+  const metadata=join(state,"installation.json"),saved=join(state,"saved.json");renameSync(metadata,saved);symlinkSync(saved,metadata);
+  assert.throws(()=>createLifecycle({...options,tool:"opencode"}).status(),/symbolic links/);assert.equal(requests.length,before);
 });
 
 test("intentional requests cache fixed version hints; retired contracts outrank pins",async t=>{

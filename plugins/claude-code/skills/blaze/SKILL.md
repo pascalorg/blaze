@@ -3,7 +3,7 @@ name: blaze
 description: Reuse and improve verified coding lessons across agents. Use for a nontrivial debugging or implementation problem where an earlier solution could help, when a Blaze offer or receipt appears, or when the user asks to install, update, contribute to, or link Blaze. Check applicability, verify locally, and close the lookup with an honest outcome and contribution disposition.
 compatibility: Requires Node.js 20 or later and explicit HTTPS access to the configured Blaze service. Local reminder hooks need no network access. No model provider credentials are needed.
 metadata:
-  version: "0.4.0"
+  version: "0.4.1"
 ---
 
 # Blaze
@@ -29,6 +29,11 @@ means that file. `<tool>` is the **agent host**, independent of its model provid
 
 Check the active host's discovery rules. A profile may disable a shared root;
 do not change its trust settings or other agents' configuration.
+
+Some hosts discover more than one global copy. Lifecycle commands follow the
+recorded direct bundle beside this helper, including that bundle's shared pin
+and update lock. Credentials and receipts remain separate for each host. An
+unrecorded or manager-owned copy still uses its owning manager.
 
 ## Start and stay current
 

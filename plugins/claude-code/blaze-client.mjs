@@ -11,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN = /^blz_[A-Za-z0-9_-]{43}$/;
 const CARD_ID = /^[a-z0-9][a-z0-9-]{2,62}$/;
 const DEFAULT_ORIGIN = "https://blaze.pascal.app";
-export const CLIENT_VERSION = "0.4.0";
+export const CLIENT_VERSION = "0.4.1";
 export const CLIENT_CONTRACT = 1;
 export const CLIENT_TOOLS = ["claude", "codex", "opencode", "cursor", "openclaw", "agent"];
 const RELEASE_FILES = ["SKILL.md", "blaze-client.mjs"];
@@ -644,6 +644,15 @@ async function locked(path, work) {
 /** Explicit lifecycle operations. Hooks never call this function or fetch a release. */
 export function createLifecycle({tool, home = homedir(), origin, helperPath = fileURLToPath(import.meta.url), fetchImpl = fetch}) {
   const paths = toolPaths(tool, home);
+  const invokedRoot = resolve(dirname(helperPath));
+  // Hosts can discover another host's global copy. Only an already recorded
+  // direct bundle (or its interrupted transaction) can establish ownership.
+  // Credentials and receipts still belong to the invoking tool's state directory.
+  if (invokedRoot !== resolve(paths.root) && CLIENT_TOOLS.some(name => resolve(toolPaths(name,home).root) === invokedRoot)) {
+    const recordedState = join(home,".config/blaze/bundles",sha256(invokedRoot).slice(0,32));
+    homePath(home,invokedRoot);homePath(home,recordedState);
+    if (pathStat(join(recordedState,"installation.json")) || pathStat(join(recordedState,"transaction.json"))) paths.root = invokedRoot;
+  }
   const base = trustedOrigin(origin ?? readToolCredential(tool, home, false).origin);
   const bundleState = join(home, ".config/blaze/bundles", sha256(resolve(paths.root)).slice(0,32));
   const metadataPath = join(bundleState, "installation.json"), journalPath = join(bundleState, "transaction.json");
