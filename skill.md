@@ -177,7 +177,7 @@ Contribution is separate from outcome feedback. Submit only within the user's
 authorized scope. Keep private code, identifiers and transcript text out of every
 candidate, including private ones. Privacy review is about exact content.
 
-Prepare a JSON envelope with a stable fresh `event_` ID, the owned `decision_id` when
+Prepare a JSON envelope with a stable fresh `event_` ID, the owned `lookup_id` when
 present, and the lesson. It must fit within 32 KiB. Preserve its exact bytes and
 event ID for retries. This example is a shape, not a candidate to submit unchanged:
 

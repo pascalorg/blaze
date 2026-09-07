@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CLIENT_CONTRACT, CLIENT_VERSION, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
+import { CLIENT_CONTRACT, CLIENT_VERSION, createId, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const source = readFileSync(new URL("./blaze-client.mjs",import.meta.url));
@@ -30,12 +30,12 @@ async function fixture(t) {
       if(req.url!==`/releases/${control.release.manifest.version}/${artifact?.sha256}/${name}`){res.writeHead(404);res.end();return;}
       res.end(control.corrupt ? "invalid bytes" : control.release.files[name]);return;
     }
-    if(req.url==="/api/install") {
+    if(req.url==="/api/installations") {
       if(control.reject){res.writeHead(control.reject,{"retry-after":"600"});res.end("PRIVATE_FAILURE_DETAIL");return;}
       const token=req.headers.authorization?.slice(7);
-      if(!identities.has(token))identities.set(token,randomUUID());
+      if(!identities.has(token))identities.set(token,createId("install"));
       if(control.lost){control.lost=false;req.socket.destroy();return;}
-      res.end(JSON.stringify({bootstrap_contract:2,install_id:identities.get(token),token}));return;
+      res.end(JSON.stringify({id:identities.get(token),object:"installation",bootstrap_contract:2,token}));return;
     }
     if(req.url==="/api/stats") {
       if(!identities.has(req.headers.authorization?.slice(7))){res.writeHead(401);res.end("PRIVATE_FAILURE_DETAIL");return;}
@@ -67,7 +67,7 @@ test("direct installation keeps credentials outside its portable folder and reus
   assert.equal(statSync(paths.token).mode&0o777,0o600);
   const before=readFileSync(paths.token,"utf8");
   assert.equal((await lifecycle.install()).credential,"reused");assert.equal(readFileSync(paths.token,"utf8"),before);
-  assert.equal(requests.filter(r=>r.path==="/api/install").length,1);
+  assert.equal(requests.filter(r=>r.path==="/api/installations").length,1);
   assert.ok(requests.filter(r=>r.path.startsWith("/releases/")||r.path==="/api/skill-release").every(r=>r.authorization===undefined&&r.body===null));
   assert.equal(get(join(state,"installation.json")).mode,"direct");
   assert.equal(lifecycle.status().update,"current");
