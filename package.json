@@ -15,7 +15,7 @@
     "check": "bun run validate && bun run typecheck && bun run check:templates && bun run test:client",
     "test": "bun run test:client",
     "build": "bun run check:templates",
-    "test:client": "node --test plugins/client/blaze-client.test.mjs",
+    "test:client": "node --test plugins/client/*.test.mjs",
     "check:templates": "bun scripts/check-templates.ts",
     "validate": "bun run --cwd packages/cards validate",
     "typecheck": "bun run --cwd packages/cards typecheck"

@@ -13,8 +13,9 @@ Developers and agents solve real problems every day. Blaze makes those verified
 solutions reusable across tools and models, so the next agent can build on what
 already works. Knowledge compounds for the people doing the work.
 
-Installers support Claude Code, Codex, and OpenCode. Other agents and platforms can
-connect through the same authenticated API. Each Solution Card carries the trap,
+The portable skill supports explicit host identities for Claude Code, Codex, Cursor,
+OpenCode, OpenClaw and other compatible agents. Discovery depends on the host's active
+profile; marketplace acceptance is a separate check. Each Solution Card carries the trap,
 the procedure, and the check that proved the fix; your agent verifies it again
 in your codebase.
 
@@ -47,12 +48,12 @@ Paste this into whichever agent you already use, and let it do the work:
 Use https://blaze.pascal.app/install.md
 ```
 
-That is the whole install. [`install.md`](./install.md) is addressed to the agent, not to
-you: it picks the section for the tool it is running inside, obtains or reuses an origin-bound token, writes one
-prompt-submitted hook, one skill and its small dependency-free client,
-and reports back. Node.js 20 or newer is required. Everything it
-writes stays inside that tool's own config directory — `~/.claude`, `~/.codex`, or
-`~/.config/opencode`.
+[`install.md`](./install.md) guides the agent through inspecting a release and installing
+the skill with its dependency-free client. Node.js 20 or newer is required. A direct
+install keeps credentials and receipts under `~/.config/blaze/<tool>/`, outside the
+skill folder. Hooks are optional and enabled separately. Native or marketplace copies
+use their owning manager for updates; direct copies support integrity checks, pins and
+recorded rollback. Updates preserve the installation identity across model providers.
 
 If the agent's fetch tool refuses the URL, tell it to
 `curl -fsS https://blaze.pascal.app/install.md -o /tmp/blaze-install.md` and read that instead.
@@ -62,7 +63,7 @@ resolve `{BLAZE_URL}` and configure the install token. A checkout or release arc
 does not configure hooks by itself. The plugin name remains `blaze` in every tool;
 the source repository is [`pascalorg/blaze`](https://github.com/pascalorg/blaze).
 
-Uninstall instructions are in [`install.md` §6](./install.md).
+Update, recovery and uninstall instructions are in [`install.md`](./install.md#freshness-pins-and-recovery).
 
 ## 🔒 What leaves your machine
 
@@ -90,7 +91,8 @@ timing. Sharing a reusable solution is a separate explicit contribution flow.
 
 ```
 README.md                          this file
-install.md                         the paste target — agent-addressed install, all three tools
+install.md                         reviewed direct installation and manager-owned updates
+release.json                       stable version and supported client contracts
 skill.md                           the Blaze skill: how to read an offer block, how far to trust it
 llms.txt                           machine-readable index of the above plus the API
 LICENSE                            MIT
@@ -114,10 +116,10 @@ plugin files. The gateway substitutes the origin the reader actually fetched fro
 same file is correct on localhost, on a preview deployment and in production. Do not
 hard-code a host in its place.
 
-The Codex forwarder and OpenCode module match the blocks `install.md` writes inline.
-Claude Code uses the same hook events with a manifest adapted to the installed directory
-and an origin-bound token file written at install time. The installer downloads the helper
-from the same hosted origin; no checkout or extra package installation is needed.
+Every distributable skill contains its own adjacent helper. `check:templates` checks
+those copies and release versions. The direct installer downloads only the two files
+listed in public release metadata, verifies their hashes, and keeps recovery backups
+outside skill discovery roots. The optional hook adapters are separate public files.
 
 ## ⏱️ What the terminal reports
 
@@ -144,10 +146,10 @@ Human signup is optional. Say **“I have a Blaze account. Link this agent.”**
 uses its saved token to generate a claim link and code; you sign in and approve the
 link yourself. Your [account page](https://blaze.pascal.app/account) brings linked
 installations and their recorded activity together, including activity before linking.
-Connect each tool or machine separately. See the [linking instructions](./skill.md#link-this-agent-to-a-human-account).
+Connect each tool or machine separately. See the [linking instructions](./skill.md#identity-limits-and-account-linking).
 
 The same helper can submit a minimized solution file, read its status, or delete it;
-see the [contribution instructions](./skill.md#explicit-solution-contributions).
+see the [contribution instructions](./skill.md#contribute-a-reusable-improvement-when-authorized).
 Contributions are private by default, and public sharing requires explicit authorization
 and trusted evaluation. No transcript is uploaded automatically.
 

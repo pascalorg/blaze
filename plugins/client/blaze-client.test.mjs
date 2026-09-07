@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { createClient, fallbackSummary, readContributionFile, validateLookupInput } from "./blaze-client.mjs";
+import { createClient, createLifecycle, fallbackSummary, readContributionFile, validateLookupInput } from "./blaze-client.mjs";
 
 async function fixture(t, options = {}) {
   const stateDir = mkdtempSync(join(tmpdir(), "blaze-public-client-"));
@@ -25,7 +25,7 @@ async function fixture(t, options = {}) {
     res.setHeader("content-type", "application/json");
     if (req.url === "/api/install") {
       if (options.rejectBootstrap) {res.statusCode=429;res.setHeader("Retry-After","600");res.end("SYNTHETIC_SECRET");return;}
-      res.end(JSON.stringify({token:"blz_"+"A".repeat(43),require_auth:true}));return;
+      res.end(JSON.stringify({token:req.headers.authorization.slice(7),install_id:randomUUID(),bootstrap_contract:2,require_auth:true}));return;
     }
     if (req.url === "/api/stats") { res.end('{"cards":2}'); return; }
     if (req.url === "/api/auth/agent/claim/start") {
@@ -67,6 +67,12 @@ async function fixture(t, options = {}) {
       res.end(JSON.stringify({ summary_line: fallbackSummary(options.offered ?? true, body.retrieval_ms) }));
       return;
     }
+    if (/^\/api\/decisions\/[^/]+\/participation$/.test(req.url)) {
+      const decisionId=req.url.split("/")[3];
+      res.end(JSON.stringify({id:"ptc_0123456789AbCdEf",object:"participation",decision_id:decisionId,
+        ...body,created_at:"2026-09-07T00:00:00Z",updated_at:"2026-09-07T00:00:00Z"}));
+      return;
+    }
     if (body.hook_event_name === "Stop") { res.end('{}'); return; }
     let decision = decisions.get(body.client_event_id);
     if (!decision) {
@@ -90,6 +96,24 @@ async function fixture(t, options = {}) {
   const client = createClient({ origin, tool: "codex", token: "blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", stateDir });
   return { client, stateDir, requests, origin };
 }
+
+test("outcome closes participation using only the owned decision and a fixed category",async(t)=>{
+  const {client,requests,stateDir}=await fixture(t);
+  const result=await client.lookup({query:"Cancel semaphore admission without leaking permits"});
+  const id=result.blaze.decision_id;
+  await client.outcome(id,{result:"solved_without_memory",verification_status:"passed",participation:"no_novel_solution"});
+  const sent=requests.find(r=>r.path.endsWith("/participation"));
+  assert.equal(sent.method,"PUT");
+  assert.deepEqual(sent.body,{status:"no_novel_solution",contribution_id:null});
+  const saved=JSON.parse(readFileSync(join(stateDir,`${id}.json`),"utf8"));
+  assert.equal(saved.participation.status,"no_novel_solution");
+  assert.ok(saved.outcome.summary_line);
+  const count=requests.length;
+  await assert.rejects(client.participation(randomUUID(),{status:"privacy_skip"}),/No matching local/);
+  await assert.rejects(client.participation(id,{status:"privacy_skip",SYNTHETIC_SECRET_FIELD:"private"}),e=>!e.message.includes("SYNTHETIC_SECRET"));
+  await assert.rejects(client.participation(id,{status:"contributed"}),/requires an owned/);
+  assert.equal(requests.length,count);
+});
 
 test("explicit conceptual lookup sends only the bounded contract and stores no query text", async (t) => {
   const { client, requests, stateDir } = await fixture(t);
@@ -132,6 +156,24 @@ test("no-offer decisions retain feedback context and zero credited savings", asy
   await client.outcome(response.blaze.decision_id, { result: "solved_without_memory", verification_status: "passed" });
   assert.equal(requests.at(-1).body.result, "solved_without_memory");
   assert.equal(requests.at(-1).body.offer_id, undefined);
+});
+
+test("reviewed public version hints cross only the explicit lookup boundary", async t => {
+  const {client, requests, stateDir} = await fixture(t);
+  const framework_versions=[{name:"tanstack-react-table",version:"9.0.0-alpha.54"},{name:"react",version:"19.1.0"}];
+  const result=await client.lookup({query:"Review table feature compatibility",framework_versions});
+  assert.deepEqual(requests[0].body.framework_versions,framework_versions);
+  const receipt=readFileSync(join(stateDir,`${result.blaze.decision_id}.json`),"utf8");
+  assert.equal(receipt.includes("tanstack-react-table"),false);
+  for (const hints of [
+    [{name:"@private/package",version:"1.0.0"}], [{name:"next",version:"16.3.4+private-build"}],
+    [{name:"next",version:"^16.3.4"}], [{name:"next",version:"01.0.0"}],
+    [{name:"next",version:"16.0.0-alpha.01"}], [{name:"next",version:"16.3.4",path:"/tmp/private"}],
+    [{name:"next",version:"16.3.4"},{name:"nextjs",version:"15.0.0"}],
+    Array.from({length:9},(_,i)=>({name:`library-${i}`,version:"1.0.0"})),
+  ]) await assert.rejects(client.lookup({query:"Review table feature compatibility",framework_versions:hints}));
+  assert.equal(requests.length,1);
+  assert.deepEqual(await client.hook({hook_event_name:"UserPromptSubmit",framework_versions,prompt:"private task"}).then(()=>requests.length),1);
 });
 
 test("uppercase explicit hashes normalize for the lookup protocol", async (t) => {
@@ -228,6 +270,25 @@ test("contribution receipts accept the server's complete state vocabulary", asyn
     assert.equal(submitted.state, state);
     assert.equal((await client.contribution(submitted.contribution_id)).state, state);
   }
+});
+
+test("source offers are explicit bounded IDs and invalid dispositions fail before outcome transmission",async(t)=>{
+  const {client,requests}=await fixture(t);
+  const candidate=minimizedContribution();
+  const source=randomUUID();
+  for(const source_offer_ids of [["../private"],[source,source],Array.from({length:9},randomUUID),"SYNTHETIC_SECRET"]) {
+    await assert.rejects(client.contribute({...candidate,source_offer_ids}),/eight distinct owned offer UUIDs/);
+  }
+  assert.equal(requests.length,0);
+  await client.contribute({...candidate,source_offer_ids:[source]});
+  assert.deepEqual(requests.at(-1).body.source_offer_ids,[source]);
+  const lookup=await client.lookup({query:"Cancel queued semaphore admission without leaking permits"});
+  const before=requests.length;
+  await assert.rejects(client.outcome(lookup.blaze.decision_id,{result:"solved_without_memory",verification_status:"passed",
+    participation:"contributed"}),/requires an owned/);
+  await assert.rejects(client.outcome(lookup.blaze.decision_id,{result:"solved_without_memory",verification_status:"passed",
+    task_total_ms:8*24*60*60*1000}),/Invalid task duration/);
+  assert.equal(requests.length,before);
 });
 
 test("server-shaped cards remain offer-bound and bounded before entering context", async (t) => {
@@ -348,7 +409,7 @@ test("Claude settings fallback preserves existing configuration and runs without
   const settings=join(home,".claude/settings.json");
   writeFileSync(settings,JSON.stringify(initial));
   const installer=readFileSync(fileURLToPath(new URL("../../install.md",import.meta.url)),"utf8");
-  const script=installer.match(/<<'CLAUDE_FALLBACK'\n([\s\S]*?)\nCLAUDE_FALLBACK\n/)[1];
+  const script=readFileSync(fileURLToPath(new URL("../claude-code/install-local-hooks.py",import.meta.url)),"utf8");
   const env={...process.env,HOME:home};delete env.CLAUDE_PLUGIN_ROOT;
   const run=promisify(execFile);
   await run("python3",["-c",script],{env});
@@ -384,7 +445,7 @@ test("Codex hook merge preserves unrelated hooks and removes only the obsolete B
   const path=join(home,".codex/hooks.json");
   writeFileSync(path,JSON.stringify(config));
   const installer=readFileSync(fileURLToPath(new URL("../../install.md",import.meta.url)),"utf8");
-  const script=installer.match(/<<'MERGE'\n([\s\S]*?)\nMERGE\n/)[1];
+  const script=readFileSync(fileURLToPath(new URL("../codex/install-hooks.py",import.meta.url)),"utf8");
   await promisify(execFile)("python3",["-c",script],{env:{...process.env,HOME:home}});
   const merged=JSON.parse(readFileSync(path,"utf8"));
   assert.deepEqual(merged.hooks.Stop,[{hooks:[keep]}]);
@@ -445,33 +506,16 @@ test("HTTP-date Retry-After works and untrusted error text cannot enter diagnost
 });
 
 
-test("installer reuses its matching-origin identity and refuses malformed or foreign credentials", async (t) => {
+test("setup reuses its matching-origin identity and refuses foreign credentials", async (t) => {
   const {origin,stateDir,requests}=await fixture(t);
   const home=join(stateDir,"installer home");
-  const root=join(home,".agents/skills/blaze");
-  mkdirSync(root,{recursive:true});mkdirSync(join(home,".codex"),{recursive:true});
-  const installer=readFileSync(fileURLToPath(new URL("../../install.md",import.meta.url)),"utf8");
-  const script=installer.match(/<<'TOKEN'\n([\s\S]*?)\nTOKEN\n/)[1].replaceAll("{BLAZE_URL}",origin);
-  const run=promisify(execFile);
-  const bootstrap=() => {
-    const pending=run(process.execPath,["--input-type=module","-","codex"],{env:{...process.env,HOME:home}});
-    pending.child.stdin.end(script);return pending;
-  };
-  const first=await bootstrap();
-  assert.equal(first.stdout,"blz_"+"A".repeat(43));
-  assert.equal(first.stderr,"");
-  assert.deepEqual(requests[0].body,{tool:"codex"});
-  writeFileSync(join(home,".codex/blaze-token"),JSON.stringify({version:1,origin,token:first.stdout}),{mode:0o600});
-  writeFileSync(join(root,"client-config.json"),JSON.stringify({origin}),{mode:0o600});
-  assert.equal((await bootstrap()).stdout,first.stdout);
-  assert.equal(requests.length,1);
-  writeFileSync(join(root,"client-config.json"),JSON.stringify({origin:"https://another.example.invalid"}));
-  assert.equal((await bootstrap()).stdout,first.stdout);
-  writeFileSync(join(home,".codex/blaze-token"),JSON.stringify({version:1,origin:"https://another.example.invalid",token:first.stdout}),{mode:0o600});
-  await assert.rejects(bootstrap(),error => error.stdout==="" && /different Blaze origin/.test(error.stderr));
-  writeFileSync(join(home,".codex/blaze-token"),"malformed-value",{mode:0o600});
-  await assert.rejects(bootstrap(),error => error.stdout==="" && /valid installation token/.test(error.stderr) && !error.stderr.includes("malformed-private-value"));
-  assert.equal(requests.length,1);
+  const lifecycle=createLifecycle({tool:"codex",home,origin});
+  assert.deepEqual(await lifecycle.setup(),{credential:"registered"});
+  assert.deepEqual(await lifecycle.setup(),{credential:"reused"});
+  assert.equal(requests.filter(r=>r.path==="/api/install").length,1);
+  const foreign=createLifecycle({tool:"codex",home,origin:"https://another.example.invalid"});
+  await assert.rejects(foreign.setup(),/original service/);
+  assert.equal(requests.length,2);
 });
 
 test("hook payloads stay local even when they contain prompts, paths, manifests, and transcripts", async (t) => {
@@ -497,7 +541,7 @@ test("conceptual lookup validation rejects raw or sensitive material before netw
     "Diagnose sb_secret_ABCDEFGHIJKLMNOPQRSTUVWXYZ database failure",
     "Diagnose client_secret=abcdefghijklmnop authentication failure",
   ]) await assert.rejects(client.lookup({query}),/conceptual text|secret, account identifier/);
-  await assert.rejects(client.lookup({query:"Conceptual cache issue",cwd:"/workspace"}),/unsupported field cwd/);
+  await assert.rejects(client.lookup({query:"Conceptual cache issue",cwd:"/workspace"}),/unsupported field/);
   assert.deepEqual(validateLookupInput({query:"Conceptual cache isolation issue",client_event_id:"11111111-1111-4111-8111-111111111111"},"codex"),{
     query:"Conceptual cache isolation issue",client_event_id:"11111111-1111-4111-8111-111111111111",tool:"codex",minimized:true,privacy:{version:1,intent:"conceptual"},
   });
@@ -546,17 +590,12 @@ test("oversized responses and cross-origin claim links fail closed", async (t) =
   await assert.rejects(foreignClaim.claim(),/different origin/);
 });
 
-test("installer stops on bootstrap limits without leaking response bodies or retrying", async (t) => {
+test("setup stops on bootstrap limits without leaking response bodies or retrying", async (t) => {
   const {origin,stateDir,requests}=await fixture(t,{rejectBootstrap:true});
-  const installer=readFileSync(fileURLToPath(new URL("../../install.md",import.meta.url)),"utf8");
-  const script=installer.match(/<<'TOKEN'\n([\s\S]*?)\nTOKEN\n/)[1].replaceAll("{BLAZE_URL}",origin);
-  const run=promisify(execFile);
-  const pending=run(process.execPath,["--input-type=module","-","codex"],{env:{...process.env,HOME:join(stateDir,"fresh-home")}});
-  pending.child.stdin.end(script);
-  await assert.rejects(pending,error => error.stdout==="" && /HTTP 429.*Retry after 600s/.test(error.stderr) && !error.stderr.includes("SYNTHETIC_SECRET"));
+  const lifecycle=createLifecycle({tool:"codex",home:join(stateDir,"fresh-home"),origin});
+  await assert.rejects(lifecycle.setup(),error => /HTTP 429.*Retry after 600s/.test(error.message) && !error.message.includes("SYNTHETIC_SECRET"));
   assert.equal(requests.length,1);
 });
-
 
 test("malformed successful JSON never leaks response excerpts into diagnostics", async (t) => {
   const {origin,stateDir}=await fixture(t);
