@@ -6,53 +6,28 @@ import { resolve } from "node:path";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const json = (path: string) => JSON.parse(read(path));
-const install = read("install.md");
-
-function inlineBlock(marker: string): string {
-  const match = install.match(new RegExp(`<<'?${marker}'?\\n([\\s\\S]*?)\\n${marker}\\n`));
-  assert.ok(match, `install.md must contain the ${marker} heredoc`);
-  return `${match[1]}\n`;
+const install = read("install.md"), release = json("release.json");
+const client = read("plugins/client/blaze-client.mjs"), skill = read("skill.md");
+assert.match(release.version,/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+assert.ok(skill.includes(`version: "${release.version}"`));
+assert.ok(install.startsWith(`# Install Blaze ${release.version}\n`));
+assert.ok(client.includes(`CLIENT_VERSION = "${release.version}"`));
+assert.ok(client.includes(`CLIENT_CONTRACT = ${release.client_contract};`));
+assert.equal(read("plugins/claude-code/skills/blaze/SKILL.md"),skill,"Skill copy drift");
+for (const path of ["plugins/claude-code/blaze-client.mjs","plugins/claude-code/skills/blaze/blaze-client.mjs"]) {
+  assert.equal(read(path),client,`Self-contained plugin client drift: ${path}`);
 }
-
-assert.equal(read("plugins/codex/blaze-hook.sh"), inlineBlock("HOOK"), "Codex forwarder drift");
-assert.equal(read("plugins/opencode/blaze.js"), inlineBlock("PLUGINJS"), "OpenCode module drift");
-assert.equal(read("plugins/claude-code/skills/blaze/SKILL.md"), read("skill.md"), "Skill copy drift");
-assert.equal(read("plugins/claude-code/blaze-client.mjs"), read("plugins/client/blaze-client.mjs"), "Client copy drift");
-assert.equal((install.match(/\{BLAZE_URL\}\/blaze-client\.mjs/g) ?? []).length, 3, "Every tool must install the client");
-assert.equal(install.trimEnd().split("\n").at(-1), "BLAZE-INSTALL-END", "Installer end marker missing");
-
-const marketplace = json(".claude-plugin/marketplace.json");
-const plugin = json("plugins/claude-code/.claude-plugin/plugin.json");
-const installedPlugin = JSON.parse(inlineBlock("PLUGIN"));
+assert.equal(install.trimEnd().split("\n").at(-1),"BLAZE-INSTALL-END");
+assert.ok(install.includes("/api/skill-release") && install.includes("--max-redirs 0"));
+const marketplace = json(".claude-plugin/marketplace.json"), plugin = json("plugins/claude-code/.claude-plugin/plugin.json");
+assert.equal(marketplace.name,"blaze");assert.equal(marketplace.plugins.length,1);
+assert.equal(marketplace.plugins[0].source,"./plugins/claude-code");assert.equal(plugin.name,"blaze");
+for (const version of [plugin.version,marketplace.metadata.version,marketplace.plugins[0].version]) assert.equal(version,release.version);
 const claudeHooks = json("plugins/claude-code/hooks/hooks.json").hooks;
-const installedHooks = JSON.parse(inlineBlock("HOOKS")).hooks;
 const codexHooks = json("plugins/codex/hooks.json").hooks;
-const events = ["UserPromptSubmit"];
-
-assert.equal(marketplace.name, "blaze");
-assert.equal(marketplace.plugins.length, 1);
-assert.equal(marketplace.plugins[0].source, "./plugins/claude-code");
-assert.equal(plugin.name, "blaze");
-assert.equal(installedPlugin.name, plugin.name);
-assert.equal(installedPlugin.version, plugin.version, "Installed plugin version drift");
-assert.equal(marketplace.metadata.version, plugin.version, "Marketplace version drift");
-assert.equal(marketplace.plugins[0].version, plugin.version, "Marketplace entry version drift");
-assert.deepEqual(Object.keys(claudeHooks).sort(), events);
-assert.deepEqual(Object.keys(installedHooks).sort(), events);
-assert.deepEqual(Object.keys(codexHooks).sort(), events);
-for (const event of events) {
-  const template = claudeHooks[event][0].hooks[0];
-  const installed = installedHooks[event][0].hooks[0];
-  assert.deepEqual(installed, template, `${event} Claude hook drift`);
-  assert.equal(template.type, "command");
-  assert.equal(template.command, 'node "${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs" hook --tool claude');
-  assert.equal(codexHooks[event][0].hooks[0].command, "~/.codex/blaze-hook.sh");
-  assert.equal(codexHooks[event][0].hooks[0].timeout, 5);
-}
-
-const syntax = Bun.spawnSync(["bash", "-n", resolve(root, "plugins/codex/blaze-hook.sh")]);
-assert.equal(syntax.exitCode, 0, "Codex forwarder must be valid Bash");
-// Parsing only: never import the plugin or run installer commands during checks.
-new Bun.Transpiler({ loader: "js" }).transformSync(read("plugins/opencode/blaze.js"));
-new Bun.Transpiler({ loader: "js" }).transformSync(read("plugins/client/blaze-client.mjs"));
-console.log("Installer blocks, plugin metadata, hook events, and script syntax agree.");
+for(const hooks of [claudeHooks,codexHooks]) assert.deepEqual(Object.keys(hooks),["UserPromptSubmit"]);
+assert.equal(claudeHooks.UserPromptSubmit[0].hooks[0].command,'node "${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs" hook --tool claude');
+assert.equal(codexHooks.UserPromptSubmit[0].hooks[0].command,"~/.codex/blaze-hook.sh");
+assert.equal(Bun.spawnSync(["bash","-n",resolve(root,"plugins/codex/blaze-hook.sh")]).exitCode,0);
+for(const path of ["plugins/opencode/blaze.js","plugins/client/blaze-client.mjs"]) new Bun.Transpiler({loader:"js"}).transformSync(read(path));
+console.log("Portable skill, plugin copies, release metadata and local hook syntax agree.");

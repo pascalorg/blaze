@@ -1,123 +1,81 @@
-# Plugins
+# Agent integrations
 
-One directory per tool. The Codex forwarder and OpenCode module are byte-identical to
-the blocks [`../install.md`](../install.md) writes inline. Claude Code has a repository
-manifest and an install-time manifest for their different directory layouts; its hook
-events match, with the origin-bound token stored with user-only permissions at install time. Keep corresponding files in
-sync. `bun run check:templates` checks these relationships.
+The portable skill works without hooks. Its `SKILL.md` and adjacent
+`blaze-client.mjs` travel together. Each host stores credentials and receipts under
+`~/.config/blaze/<tool>/`, independently of its model provider. The full workflow
+and privacy boundaries are in [skill.md](../skill.md).
 
-`{BLAZE_URL}` is a literal placeholder in installer/config templates. The gateway substitutes the
-origin the reader fetched from, so the same file is correct on localhost, on a preview
-deployment and in production. Never commit a hard-coded host in its place.
+`client/blaze-client.mjs` is the canonical dependency-free Node.js 20+ helper.
+The Claude plugin has two byte-identical copies: one at its root for native
+hooks, one beside `skills/blaze/SKILL.md` for portable skill execution. Run
+`bun run check:templates` to check copies, versions and hook syntax.
 
-The installed hook is local-only: it ignores raw hook fields and returns fixed guidance
-for an explicit conceptual lookup. It never calls the gateway, and nothing Blaze installs
-can block a prompt.
+## Native and direct ownership
 
-| Tool | Events | Transport |
+Use the actual loaded skill directory when invoking the helper. A native plugin
+or marketplace copy uses its manager for updates. Explicit `setup --tool <host>`
+creates or reuses the host's Blaze credential without changing provider settings.
+A native plugin checkout does not itself create a credential or approve a hook.
+
+Direct installs use [install.md](../install.md), which reviews a release, verifies
+two artifact hashes, and preserves credentials and receipts through replacement.
+Updates do not silently overwrite modified or unknown files. An interrupted swap
+has a recovery journal and private backups outside skill discovery roots.
+`status` distinguishes the running helper from the recorded version on disk.
+
+Codex, Cursor and eligible OpenClaw profiles share the default
+`~/.agents/skills/blaze` bundle. Claude Code uses `~/.claude/skills/blaze` and
+OpenCode uses `~/.config/opencode/skills/blaze`. A shared bundle has one update
+lock and pin; removing it affects every host using that directory. Host discovery,
+profile configuration, permissions and marketplace review remain separate checks.
+
+## Optional reminder adapters
+
+| Host | Event | Adapter |
 | --- | --- | --- |
-| Claude Code | `UserPromptSubmit` | `type: "command"` — local reminder from the shared client |
-| Codex CLI | `UserPromptSubmit` | `type: "command"` — Codex has no HTTP hook |
-| OpenCode | `chat.message` | plugin module and the same local reminder |
+| Claude Code | `UserPromptSubmit` | `claude-code/hooks/hooks.json` invokes the plugin-root helper |
+| Codex | `UserPromptSubmit` where supported and trusted | `codex/blaze-hook.sh` invokes the shared skill helper |
+| OpenCode | `chat.message` | `opencode/blaze.js` adds fixed local guidance |
 
-## `claude-code/`
+Hooks never send a prompt, transcript, directory, source, environment, manifest,
+log or session identifier. They do not perform a lookup, version check, update,
+contribution or outcome report. An explicit helper command is required for each
+service operation. Stop events do not infer success.
 
-A Claude Code plugin layout: `.claude-plugin/plugin.json`, `hooks/hooks.json`,
-`skills/blaze/SKILL.md`, and `blaze-client.mjs`. The marketplace metadata names it
-`blaze`. Command hooks resolve the helper through `${CLAUDE_PLUGIN_ROOT}`. A checkout
-alone does not configure an install token. Use the hosted `install.md` §2 path, which resolves the
-origin and writes the token and installed layout into `~/.claude/skills/blaze/`.
+For a direct install, the optional Python scripts in `claude-code/` and `codex/`
+merge owned reminder entries and remove only exact known obsolete Blaze Stop
+commands. Inspect them first. Install the Codex forwarder at
+`~/.codex/blaze-hook.sh` before merging its entry. Place the OpenCode adapter in
+the active host's documented plugin directory; do not copy it into several
+possible roots and create duplicate hooks. Native plugin users do not also need
+a direct settings hook.
 
-`skills/blaze/SKILL.md` is a copy of [`../skill.md`](../skill.md) — the plugin ships the
-skill so a fresh install works before the first gateway fetch. Keep them identical.
+Respect the host's approval and reload process. Never edit trust approvals to
+make a hook run. A new conversation is a useful reload boundary, but discovery
+and execution must be verified on the installed host version.
 
-Hooks bind at session start, so a fresh install is live next session; `/reload-plugins`
-loads it now. `UserPromptSubmit` does not support `matcher`, so the key is
-omitted (it would be silently ignored).
+## Requests, outcomes and lifecycle
 
-## `codex/`
+Intentional API calls require the existing origin-bound Blaze credential.
+Redirects are rejected. Credentials and untrusted error bodies are never printed.
+HTTP 429 preserves the identity and event IDs and respects its cooldown. A 401
+requires deliberate credential repair; a retired client contract requires an
+update through the owning manager.
 
-`hooks.json` carries the entry to **merge** into `~/.codex/hooks.json` — that file is
-usually already in use, so never overwrite it. `install.md` §3 does the merge idempotently
-with a short Python block.
+Lookup and card downloads measure complete replies, including JSON parsing.
+Receipts store only IDs, categories, origin and timings. Outcome retries retain
+an exact event and payload. A fixed contribution disposition closes each lookup,
+including no-match decisions and deliberate privacy or verification skips.
+Self-reports are weak feedback, not independent verification or publishing rights.
 
-It also saves the full `skill.md` as `~/.agents/skills/blaze/SKILL.md` and prints
-it for the installing agent to read.
+Contributions are explicit minimized envelopes, private by default. Public
+sharing requires authorization for the exact candidate, followed by independent
+approved verification. Derived candidates cite their owned source offer IDs.
+Use the helper's contribution commands and the complete schema in the skill.
+Never upload transcripts automatically.
 
-`blaze-hook.sh` belongs at `~/.codex/blaze-hook.sh` (the path the entries name) and invokes the shared helper beside the skill. The helper reads
-the token from `~/.codex/blaze-token`, mode `600`. It always exits `0` and prints `{}` on
-any failure.
-
-Codex requires a **one-time trust confirmation per hook entry**: the user runs `/hooks` and
-approves the `blaze-hook.sh` entry, recorded in `~/.codex/config.toml`. Until then the
-hooks are inert — expected, not a failed install.
-
-## `opencode/`
-
-`blaze.js` belongs in `~/.config/opencode/plugins/`, and imports the helper from `../skills/blaze/blaze-client.mjs`. The helper reads
-`~/.config/opencode/blaze-token`. Some builds read the singular `plugin/` directory
-instead; if the plugin is missing at next start, copy the file there too.
-
-The installer saves the full `skill.md` as
-`~/.config/opencode/skills/blaze/SKILL.md` and prints it for the installing agent
-to read.
-
-`chat.message` adds fixed local guidance to the turn. The plugin does not read, copy, or
-send the user's message, directory, session identifier, or other message parts.
-
-## Authentication and fair use
-
-Every service call uses the existing origin-bound installation token, including lookup and
-stats. Missing or malformed tokens stop the request locally. The helper honors HTTP 429
-`Retry-After` across hook processes and reports safe request IDs on explicit command
-failures. Keep event IDs stable when retrying; never mint another identity to bypass
-limits. Human signup remains optional. Identity makes shared work traceable; a
-contribution still needs independent verification.
-
-## Timing and outcomes
-
-`client/blaze-client.mjs` is the shared source, copied byte-for-byte into the Claude
-plugin and downloaded next to the installed skill for each tool. It uses Node.js 20+
-built-ins only. Its credential file binds the token to the hosted origin; tests use a
-local HTTP server.
-
-The client measures complete HTTP replies through JSON parsing, including card downloads
-performed through its `card` command. Receipts contain IDs and timing, never prompt/code
-contents, in user-only files under the skill's `receipts/` directory. `outcome` requires an
-explicit result and verification status; it retains the exact event and payload for a
-retry. The skill asks the agent to copy the returned three-times summary at the end of
-its answer.
-
-The helper's `lookup` command accepts an inspected, one-line conceptual problem, plus
-an optional fingerprint for the same exact public or fully non-sensitive reproducible
-fixture and optional client event IDs. A generalized problem is insufficient for timing
-comparison, and a digest does not anonymize private source, paths, prompts, manifests, or
-identifiers. It sends a strict `minimized: true` privacy contract and rejects raw-context
-fields, obvious credentials, paths, URLs, code-shaped input, and unknown fields. This
-validation is a guardrail rather than proof that text is safe. See the full skill for the
-human review boundary and timing rules. Run `bun run test:client` for local-only
-transport/protocol tests.
-
-## Optional account and contributions
-
-The same helper supports these explicit commands; no second skill or package is needed:
-
-| Command | Action |
-| --- | --- |
-| `stats --tool <tool>` | Check authenticated service access. |
-| `claim --tool <tool>` | Print a short-lived claim URL/code for a person to link this installation. |
-| `contribute --tool <tool> --file <minimized-card.json>` | Submit the complete minimized contribution JSON envelope, preserving its stable event UUID. |
-| `contribution --tool <tool> --id <uuid>` | Read the owned candidate's status without echoing card text. |
-| `delete-contribution --tool <tool> --id <uuid>` | Revoke and erase the owned hosted candidate payload. |
-
-Each command follows `node <installed-skill-directory>/blaze-client.mjs`. None runs
-automatically from a hook. Installation works without human signup; optional account
-pages are `/signup` and `/account` on the configured gateway. The helper uses the
-existing installation token and never asks for a person's email.
-
-See [`skill.md`](../skill.md#explicit-solution-contributions) for the exact contribution
-envelope and data boundaries. Private is the default. Public submission requires the
-user's explicit authorization for that candidate, `visibility: "public"`, and
-`public_sharing_authorized: true`; trusted evaluation is still required before
-publication. Never upload a transcript automatically. Retrying the same file preserves
-the event ID and payload, while changing it under the same ID conflicts.
+`status`, `check-update`, `update`, `pin`, `unpin`, `rollback` and `uninstall` are
+explicit lifecycle commands. Public freshness requests send no credential. A
+failed check cannot claim the skill is current. Hashes and local validation bound
+specific failures; they do not guarantee arbitrary disclosure is safe or that a
+marketplace will accept an integration.

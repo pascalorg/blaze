@@ -14,7 +14,9 @@ request safe to publish.
   personal data, credentials, or secrets.
 - The lookup wire format is strict: `query`, a UUID `client_event_id`, `tool`,
   `minimized: true`, `privacy: { version: 1, intent: "conceptual" }`, and optional
-  bounded framework-name `stack` array or `context_fingerprint` fields. A fingerprint is
+  bounded framework-name `stack` array, explicitly reviewed exact public
+  `framework_versions` pairs, or `context_fingerprint` fields. Versions must never
+  come from an automatic manifest upload. A fingerprint is
   only for the same exact public or fully non-sensitive reproducible fixture, including
   its exact starting state and verification definition. A generalized description is not
   sufficient. Never hash private inputs and call them anonymous. Reject unknown fields

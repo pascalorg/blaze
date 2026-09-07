@@ -15,15 +15,15 @@ bun run check
 ```
 
 No application credentials, database, or running gateway are needed. The checks validate
-the two example cards, typecheck the card package, and compare installer blocks with the
-plugin files. Client tests use a synthetic localhost server and temporary home directory;
+the two example cards, typecheck the card package, and compare release metadata and
+self-contained plugin copies. Client tests use a synthetic localhost server and temporary home directory;
 they never install real hooks or contact the hosted gateway.
 
-Keep the Codex and OpenCode inline blocks in `install.md` identical to their files under
-`plugins/`. Keep `skill.md` identical to `plugins/claude-code/skills/blaze/SKILL.md`.
-Claude Code's installed manifest differs from its repository manifest because their
-directory layouts differ; hook settings and version numbers must still agree.
-Keep `plugins/client/blaze-client.mjs` identical to its copy in `plugins/claude-code/`.
+Keep `skill.md` identical to `plugins/claude-code/skills/blaze/SKILL.md`.
+Keep `plugins/client/blaze-client.mjs` identical to both copies under
+`plugins/claude-code/`: the plugin-root hook helper and the helper beside its skill.
+Keep the client contract and version, `release.json`, plugin metadata and install title
+in agreement. Credentials and receipts must stay outside every distributable directory.
 Preserve `{BLAZE_URL}` placeholders and the final `BLAZE-INSTALL-END` marker.
 
 ## Public boundary
@@ -40,9 +40,10 @@ below publishes a GitHub source archive only.
 
 ## Release a skill archive
 
-1. Update the plugin version in `plugins/claude-code/.claude-plugin/plugin.json`, both
-   version fields in `.claude-plugin/marketplace.json`, and the inline `PLUGIN` manifest
-   in `install.md`. The card package has its own version; update it when its API changes.
+1. Update `release.json`, the skill's string version metadata, the client's version,
+   the install title, and all plugin version fields. Update the release timestamps.
+   Preserve supported legacy client contracts unless a deliberate retirement is
+   documented. Sync the skill and helper copies. The card package has its own version.
 2. Run `bun install --frozen-lockfile` and `bun run check`, then review and merge the
    public changes to `main`.
 3. Create and push an annotated version tag at the reviewed commit:
@@ -66,3 +67,9 @@ The archive contains only Git-tracked files from the tagged public tree, with a
 with `shasum -a 256 -c SHA256SUMS` (or `sha256sum -c SHA256SUMS` on Linux).
 The archive retains template placeholders; it does not mint a token or install hooks.
 Releases do not publish to npm or deploy the hosted app.
+
+Hosted release metadata is a snapshot of this public commit and the exact skill/helper
+bytes. Published versions cannot silently change their bytes. The hosted build verifies
+its pinned release; local edited trees produce a draft accepted only on loopback origins.
+Digests from the same HTTPS origin detect corruption and mixed downloads, not a
+compromised publisher. Manager-owned installations retain their manager's trust boundary.
