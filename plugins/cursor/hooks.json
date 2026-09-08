@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "./blaze-hook.sh",
+        "timeout": 5
+      }
+    ]
+  }
+}

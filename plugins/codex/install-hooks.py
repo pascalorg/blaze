@@ -41,7 +41,9 @@ for ev in ("UserPromptSubmit",):
     existing = [h for g in groups for h in g.get("hooks", [])
                 if h.get("type") == "command" and h.get("command") in owned_commands]
     if existing:
-        for hook in existing: hook["command"] = cmd
+        for hook in existing:
+            hook["command"] = cmd
+            hook.pop("statusMessage", None)
     else:
         groups.append({"hooks": [{"type": "command", "command": cmd, "timeout": 5}]})
 # Remove only Blaze's obsolete Stop entry from earlier installations.

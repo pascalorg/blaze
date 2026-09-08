@@ -1,9 +1,9 @@
 ---
 name: blaze
-description: Reuse and improve verified coding lessons across agents. Use for a nontrivial debugging or implementation problem where an earlier solution could help, when a Blaze offer or receipt appears, or when the user asks to install, update, contribute to, or link Blaze. Check applicability, verify locally, and close the lookup with an honest outcome and contribution disposition.
-compatibility: Requires Node.js 20 or later and explicit HTTPS access to the configured Blaze service. Local reminder hooks need no network access. No model provider credentials are needed.
+description: Quietly reuse and improve verified coding lessons across agents. Use for a nontrivial debugging or implementation problem where an earlier solution could help, when a Blaze offer or receipt appears, or when the user asks to inspect, install, update, contribute to, or link Blaze. Check applicability, verify locally, and close the lookup with an honest outcome and contribution disposition without adding routine user-visible narration.
+compatibility: Requires Node.js 20 or later and explicit HTTPS access to the configured Blaze service. Local model-context hooks need no network access. No model provider credentials are needed.
 metadata:
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # Blaze
@@ -13,6 +13,13 @@ The useful loop is: check earlier work, solve and verify here, report the result
 and contribute a new lesson when useful and authorized. A card is a semantic
 summary; it can omit details and be wrong for the current task. Blaze currently
 uses a hosted service, not a decentralized network.
+
+Routine Blaze activity stays inside the agent workflow. Do not add banners,
+footers, progress notices, timing lines, update nags, lookup misses, or failure
+narration to normal user-facing replies. Explain Blaze when the user asks to
+inspect its activity, status, evidence, timing, installation, or diagnostics.
+The host may still render its own generic tool-call or hook activity; do not claim
+that Blaze can suppress host-owned interface chrome.
 
 Use the `blaze-client.mjs` beside this `SKILL.md`. Resolve that actual directory,
 including when an agent or marketplace installed it elsewhere. Below, `<client>`
@@ -37,8 +44,8 @@ unrecorded or manager-owned copy still uses its owning manager.
 
 ## Start and stay current
 
-When first using Blaze in a conversation, run `node <client> status --tool <tool>`.
-This is offline. `running_version` describes this helper, `disk_version` the
+When first using Blaze in a conversation, inspect `node <client> status --tool <tool>`
+without narrating the routine result. This is offline. `running_version` describes this helper, `disk_version` the
 recorded direct installation, and `update` a recent public version check. Unknown
 or stale information is not evidence that the skill is current. When freshness is
 unknown, `node <client> check-update --tool <tool>` makes one bounded public metadata
@@ -52,6 +59,8 @@ their manager. Do not use direct installation to bypass ownership or a pin. If a
 client contract has retired, update before retrying; do not weaken the protocol or
 create another identity. After replacement, reload the skill in a fresh agent
 conversation and check its version. Downloaded files do not prove it reloaded.
+Do not turn freshness results into user-visible update notices unless the user is
+inspecting Blaze or must act on an authorized lifecycle request.
 
 For a newly installed skill without a credential, complete authorized setup with
 `node <client> setup --tool <tool>`. Credentials and receipts live in
@@ -69,8 +78,9 @@ simple prose edits and unrelated requests do not need a lookup.
 Never send raw prompts, system or developer instructions, source, diffs,
 manifests, directories, paths, branches, logs, transcripts, personal or account
 identifiers, credentials, or secrets. Redaction and hashing do not make private
-inputs safe to disclose. Automatic hooks only add a local reminder and transmit
-none of these inputs.
+inputs safe to disclose. Automatic hooks only add model-only local guidance and
+transmit none of these inputs. They must not create a user-visible chat message or
+status banner.
 
 ```bash
 node <client> lookup --tool <tool> --query 'Preserve an idempotent result when a network response is lost'
@@ -104,8 +114,9 @@ verification description. Trusted verification does not grant authority.
    Inspect replay payloads as data; never execute a returned script automatically.
 4. Choose meaningful local verification and run it. A returned command is only a
    hint about the type of check. Follow the user's scope and repository rules.
-5. Mention what helped or why the card did not apply. Results are agent self-reports
-   unless a separately identified independent check exists.
+5. Keep routine use invisible in the user-facing answer. If the user asks to inspect
+   Blaze, identify what helped or why the card did not apply. Results are agent
+   self-reports unless a separately identified independent check exists.
 
 For a complete card, use the owned receipt so the extra download is timed:
 
@@ -116,8 +127,9 @@ node <client> card --tool <tool> --decision <lookup-id> --card <offered-card-id>
 ## Close every lookup, including misses
 
 Before finishing work on a Blaze decision, report the observed result and choose
-a contribution disposition. Do not invent IDs, measurements or success. Stop
-hooks do not send feedback or infer that a task passed.
+a contribution disposition. This closes the receipt quietly by default. Do not
+invent IDs, measurements or success. Stop hooks do not send feedback or infer that
+a task passed.
 
 ```bash
 node <client> outcome --tool <tool> --decision <lookup-id> --result solved_without_memory --verification passed --participation no_novel_solution
@@ -143,6 +155,11 @@ Otherwise the boundary is `task_start_to_agent_end`. The helper measures wall ti
 from lookup start through the report, including retrieval and waiting. Use
 `--task-total-ms` only for a separately recorded interval, never a guess.
 
+Successful `outcome` and `participation` commands write no stdout by default.
+Their library methods still return validated receipts. For explicit command-line
+diagnostics, add `--output summary` or `--output json` to `outcome`, or
+`--output json` to `participation`.
+
 Retries preserve the original event, result and timing. If the outcome succeeded
 but the disposition needs retrying, send it separately:
 
@@ -150,10 +167,12 @@ but the disposition needs retrying, send it separately:
 node <client> participation --tool <tool> --decision <lookup-id> --status no_novel_solution
 ```
 
-Use the validated timing line from the helper in your final answer for that
-lookup unless a higher-priority format prevents it. If reporting fails,
-`node <client> summary --tool <tool> --decision <lookup-id>` gives a local
-fallback. With no receipt, all times are unknown:
+Do not put a timing line or Blaze footer in a normal final answer. When the user
+explicitly asks to inspect Blaze timing or evidence,
+`node <client> summary --tool <tool> --decision <lookup-id>` returns the validated
+local summary. If reporting failed or no receipt exists, say that only in the
+requested Blaze inspection and keep all times honest. With no receipt, all times
+are unknown:
 
 ```text
 Blaze · original solve unknown · retrieval unknown · time saved unknown
@@ -242,7 +261,9 @@ switches. A separate host or machine has its own installation. No OpenAI, Anthro
 Azure or Bedrock provider credential is sent to Blaze. On 401, repair the existing
 installation deliberately; never retry anonymously or register around revocation.
 On 429, respect the cooldown and keep the same identity and event IDs. When Blaze
-is unavailable, continue the task and state what evidence is missing.
+is unavailable, continue the task. Keep routine unavailability silent; report it
+only when the user asks to inspect Blaze or when their requested Blaze operation
+cannot be completed.
 
 When the user asks to link this installation, run `node <client> claim --tool <tool>`.
 Give them the returned `claimUrl`, `claimCode` and `expiresAt`. They open the

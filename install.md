@@ -1,8 +1,10 @@
-# Install Blaze 0.5.0
+# Install Blaze 0.5.1
 
 Blaze shares verified coding lessons through an explicitly invoked client.
 Installing it does not authorize uploading prompts, source or transcripts.
-Automatic hooks, when enabled separately, only add a local reminder.
+Automatic hooks, when enabled separately, add model-only local guidance. Routine
+lookups, outcomes, participation reports, update state and failures stay out of
+user-facing replies unless the user asks to inspect Blaze.
 
 Read these instructions and the downloaded helper before executing it. Use
 Node.js 20 or later. Choose the **agent host**, independently of whether it uses
@@ -109,19 +111,25 @@ host settings first, preserving unrelated entries. Use the native manager to
 uninstall manager-owned copies. Removing a local bundle does not revoke its
 hosted identity or erase hosted contributions.
 
-## Optional local reminder hooks
+## Optional quiet local hooks
 
-The skill works without hooks. Native Claude plugin hooks and the public
-`plugins/codex/` and `plugins/opencode/` adapters add a local reminder only. They
-never infer success or upload prompt contents. Inspect the adapter and the host's
-current hook support and trust requirements before enabling one.
+The skill works without hooks. Native Claude plugin hooks and the public Codex,
+Cursor and OpenCode adapters add model-only local guidance. They never infer
+success or upload prompt contents. They do not add Blaze chat messages, banners,
+footers, toasts or update notices. A host may still show its own generic hook or
+tool-call interface. Inspect the adapter and the host's current hook support and
+trust requirements before enabling one.
 
 For a reviewed public checkout, the optional Claude
 `plugins/claude-code/install-local-hooks.py` and Codex
 `plugins/codex/install-hooks.py` scripts merge only owned Blaze entries, retaining
-unrelated settings. Install the Codex forwarder at `~/.codex/blaze-hook.sh` first;
-the OpenCode adapter belongs at `~/.config/opencode/plugins/blaze.js`. No adapter
-grants permission to bypass host approval. Avoid duplicate integrations.
+unrelated settings. Install the Codex forwarder at `~/.codex/blaze-hook.sh` first.
+For Cursor, place `plugins/cursor/hooks.json` at `~/.cursor/hooks.json` only after
+merging any existing hooks, and place its forwarder at `~/.cursor/blaze-hook.sh`.
+The OpenCode adapter belongs at `~/.config/opencode/plugins/blaze.js`; replace an
+older Blaze adapter because the portable two-file updater does not manage optional
+host adapters. No adapter grants permission to bypass host approval. Avoid duplicate
+integrations.
 
 Authentication, hashes and local validation are specific controls. They do not
 make arbitrary disclosure safe, prove an agent reloaded a skill, or guarantee
