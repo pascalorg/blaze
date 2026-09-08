@@ -5,7 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CLIENT_CONTRACT, CLIENT_VERSION, createId, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
+import { API_VERSION, CLIENT_CONTRACT, CLIENT_VERSION, createId, createClient, createLifecycle, compareVersions, toolPaths, validateRelease } from "./blaze-client.mjs";
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const source = readFileSync(new URL("./blaze-client.mjs",import.meta.url));
@@ -22,15 +22,21 @@ async function fixture(t) {
   const control={release:bundle("0.4.0"),offline:false,corrupt:false,lost:false,reject:0},requests=[],identities=new Map();
   const server=createServer(async(req,res)=>{
     let raw="";for await(const chunk of req) raw+=chunk;
-    requests.push({path:req.url,authorization:req.headers.authorization,idempotencyKey:req.headers["idempotency-key"],body:raw?JSON.parse(raw):null});
+    requests.push({path:req.url,authorization:req.headers.authorization,idempotencyKey:req.headers["idempotency-key"],
+      apiVersion:req.headers["blaze-version"],clientVersion:req.headers["blaze-client-version"],clientContract:req.headers["blaze-client-contract"],body:raw?JSON.parse(raw):null});
     if(control.offline){res.writeHead(503);res.end("PRIVATE_FAILURE_DETAIL");return;}
-    if(req.url==="/api/skill-release"){res.setHeader("content-type","application/json");res.end(JSON.stringify(control.release.manifest));return;}
+    if(req.url==="/api/skill-release"){
+      if(req.headers["blaze-version"]||req.headers["blaze-client-version"]||req.headers["blaze-client-contract"]||req.headers.authorization){res.writeHead(400);res.end();return;}
+      res.setHeader("content-type","application/json");res.end(JSON.stringify(control.release.manifest));return;
+    }
     if(req.url.startsWith("/releases/")) {
+      if(req.headers["blaze-version"]||req.headers["blaze-client-version"]||req.headers["blaze-client-contract"]||req.headers.authorization){res.writeHead(400);res.end();return;}
       const name=req.url.split("/").at(-1),artifact=control.release.manifest.artifacts.find(a=>a.name===name);
       if(req.url!==`/releases/${control.release.manifest.version}/${artifact?.sha256}/${name}`){res.writeHead(404);res.end();return;}
       res.end(control.corrupt ? "invalid bytes" : control.release.files[name]);return;
     }
     if(req.url==="/api/installations") {
+      if(req.headers["blaze-version"]!==API_VERSION||req.headers["blaze-client-version"]!==CLIENT_VERSION||req.headers["blaze-client-contract"]!==String(CLIENT_CONTRACT)){res.writeHead(426);res.end();return;}
       if(control.reject){res.writeHead(control.reject,{"retry-after":"600"});res.end("PRIVATE_FAILURE_DETAIL");return;}
       const token=req.headers.authorization?.slice(7);
       if(!identities.has(token))identities.set(token,createId("install"));
@@ -38,6 +44,7 @@ async function fixture(t) {
       res.end(JSON.stringify({id:identities.get(token),object:"installation",bootstrap_contract:2,token}));return;
     }
     if(req.url==="/api/stats") {
+      if(req.headers["blaze-version"]!==API_VERSION||req.headers["blaze-client-version"]!==CLIENT_VERSION||req.headers["blaze-client-contract"]!==String(CLIENT_CONTRACT)){res.writeHead(426);res.end();return;}
       if(!identities.has(req.headers.authorization?.slice(7))){res.writeHead(401);res.end("PRIVATE_FAILURE_DETAIL");return;}
       res.end('{"cards":0}');return;
     }
@@ -71,9 +78,40 @@ test("direct installation keeps credentials outside its portable folder and reus
   const registration=requests.find(r=>r.path==="/api/installations");
   assert.equal(registration.idempotencyKey,hash(registration.authorization.slice(7)));
   assert.notEqual(registration.idempotencyKey,registration.authorization.slice(7));
-  assert.ok(requests.filter(r=>r.path.startsWith("/releases/")||r.path==="/api/skill-release").every(r=>r.authorization===undefined&&r.body===null));
+  assert.deepEqual([registration.apiVersion,registration.clientVersion,registration.clientContract],[API_VERSION,CLIENT_VERSION,String(CLIENT_CONTRACT)]);
+  const stats=requests.find(r=>r.path==="/api/stats");
+  assert.deepEqual([stats.apiVersion,stats.clientVersion,stats.clientContract],[API_VERSION,CLIENT_VERSION,String(CLIENT_CONTRACT)]);
+  assert.ok(requests.filter(r=>r.path.startsWith("/releases/")||r.path==="/api/skill-release").every(r=>
+    r.authorization===undefined&&r.apiVersion===undefined&&r.clientVersion===undefined&&r.clientContract===undefined&&r.body===null));
   assert.equal(get(join(state,"installation.json")).mode,"direct");
   assert.equal(lifecycle.status().update,"current");
+});
+
+test("external 0.5.2 bootstrap upgrades a recorded unpinned 0.5.0 direct install",async t=>{
+  const {home,paths,state,control,requests,identities,options,lifecycle}=await fixture(t);
+  control.release=bundle("0.5.0");await lifecycle.install();
+  const prior=get(join(state,"installation.json"));assert.equal(prior.release.version,"0.5.0");assert.equal(prior.pin,null);
+  const credential=readFileSync(paths.token,"utf8"),receiptId=createId("lookup");
+  const receipt={version:2,origin:options.origin,tool:"codex",decision_id:receiptId,client_event_id:createId("event"),started_wall_ms:1,retrieval_ms:2,offered:false,offers:[],context_fingerprint:null};
+  put(join(paths.state,"receipts",`${receiptId}.json`),receipt);
+
+  const bootstrap=join(home,"reviewed-bootstrap","blaze-client.mjs");
+  mkdirSync(resolve(bootstrap,".."),{recursive:true,mode:0o700});writeFileSync(bootstrap,source,{mode:0o600});
+  control.release=bundle(CLIENT_VERSION);const requestStart=requests.length;
+  const external=createLifecycle({...options,helperPath:bootstrap});
+  const result=await external.install();assert.equal(result.version,CLIENT_VERSION);assert.equal(result.activation,"installed");assert.equal(result.credential,"reused");
+
+  const current=get(join(state,"installation.json"));
+  assert.equal(current.mode,"direct");assert.equal(current.origin,options.origin);assert.equal(current.root,resolve(paths.root));
+  assert.equal(current.release.version,CLIENT_VERSION);assert.equal(current.pin,null);assert.ok(current.activated_at>=prior.activated_at);
+  assert.equal(current.previous.release.version,"0.5.0");
+  assert.equal(readFileSync(paths.token,"utf8"),credential);assert.deepEqual(get(join(paths.state,"receipts",`${receiptId}.json`)),receipt);assert.equal(identities.size,1);
+  assert.equal(createLifecycle(options).status().installation,"direct");
+
+  const upgradeRequests=requests.slice(requestStart),stats=upgradeRequests.find(request=>request.path==="/api/stats");
+  assert.deepEqual([stats.apiVersion,stats.clientVersion,stats.clientContract],[API_VERSION,CLIENT_VERSION,String(CLIENT_CONTRACT)]);
+  assert.ok(upgradeRequests.filter(request=>request.path==="/api/skill-release"||request.path.startsWith("/releases/")).every(request=>
+    request.authorization===undefined&&request.apiVersion===undefined&&request.clientVersion===undefined&&request.clientContract===undefined));
 });
 
 test("lost registration response reuses the saved pending secret and never mints a second identity",async t=>{

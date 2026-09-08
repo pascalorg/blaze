@@ -1,4 +1,4 @@
-# Install Blaze 0.5.1
+# Install Blaze 0.5.2
 
 Blaze shares verified coding lessons through an explicitly invoked client.
 Installing it does not authorize uploading prompts, source or transcripts.
@@ -31,17 +31,30 @@ source commit, and the sizes and SHA-256 hashes of exactly two artifacts:
 `SKILL.md` and `blaze-client.mjs`. Review the corresponding public source release
 when deciding whether to trust it. A hash verifies bytes, not the publisher.
 
-Download `{BLAZE_URL}/blaze-client.mjs` to a temporary private file over HTTPS,
-with redirects disabled. Inspect it before running it. Do not pipe a remote
-response into a shell. An example download is:
+Copy the version and the helper's SHA-256 from that reviewed manifest into the
+variables below. Download its immutable artifact to a temporary private file over
+HTTPS with redirects disabled, then verify its hash before inspecting or running
+it. Do not pipe a remote response into a shell.
 
 ```bash
 umask 077
 blaze_bootstrap_dir=$(mktemp -d)
-curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 15 --max-filesize 524288 '{BLAZE_URL}/blaze-client.mjs' --output "$blaze_bootstrap_dir/blaze-client.mjs"
+blaze_release_version='<reviewed version>'
+blaze_client_sha256='<reviewed helper SHA-256>'
+curl --fail --silent --show-error --proto '=https' --max-redirs 0 --max-time 15 --max-filesize 524288 "{BLAZE_URL}/releases/$blaze_release_version/$blaze_client_sha256/blaze-client.mjs" --output "$blaze_bootstrap_dir/blaze-client.mjs"
+node --input-type=module - "$blaze_bootstrap_dir/blaze-client.mjs" "$blaze_client_sha256" <<'NODE'
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+const [path, expected] = process.argv.slice(2);
+if (!/^[0-9a-f]{64}$/.test(expected ?? '') ||
+    createHash('sha256').update(readFileSync(path)).digest('hex') !== expected) {
+  throw new Error('Bootstrap hash mismatch; do not execute this download.');
+}
+NODE
 ```
 
-After reviewing the download, invoke it, replacing `codex` with the current host:
+Continue only after the hash check succeeds and you have reviewed the download.
+Invoke it, replacing `codex` with the current host:
 
 ```bash
 node "$blaze_bootstrap_dir/blaze-client.mjs" install --tool codex --origin '{BLAZE_URL}'
@@ -97,6 +110,15 @@ failed checks return unknown freshness and back off for five minutes. Explicit
 API calls also receive small version hints. No prompt hook fetches metadata or
 updates files. Updating requires authorization and respects pins. The direct
 updater refuses to modify manager or marketplace installations.
+
+The direct 0.5.0 and 0.5.1 updaters can receive HTTP 426 while checking the saved
+installation, before activating a newer release.
+For that recorded direct installation, follow the reviewed download and hash checks
+under [Direct installation](#direct-installation), then run the freshly downloaded
+helper with `install --tool <host> --origin '{BLAZE_URL}'`. It preserves the existing
+credential, receipts, ownership record and pin; an active pin still blocks replacement.
+Use the installed helper to unpin only when that change is separately authorized.
+Manager and marketplace installations must still update through their manager.
 
 Rollback restores the immediately preceding checked direct release and pins it.
 The first upgrade from a legacy bundle cannot automatically roll back to the

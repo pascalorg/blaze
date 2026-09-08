@@ -43,7 +43,7 @@ const TOKEN = /^blz_[A-Za-z0-9_-]{43}$/;
 const CARD_ID = idPattern(ID_PREFIXES.card);
 const AUTHORED_SLUG = /^[a-z0-9][a-z0-9-]{2,62}$/;
 const DEFAULT_ORIGIN = "https://blaze.pascal.app";
-export const CLIENT_VERSION = "0.5.1";
+export const CLIENT_VERSION = "0.5.2";
 export const CLIENT_CONTRACT = 2;
 export const API_VERSION = "2026-09-07";
 export const CLIENT_TOOLS = ["claude", "codex", "opencode", "cursor", "openclaw", "agent"];
@@ -786,6 +786,8 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
     return Buffer.concat(chunks,size);
   }
   const parseJSON = (value) => { try {return JSON.parse(value.toString("utf8"));} catch {throw new Error("Blaze returned invalid JSON");} };
+  const serviceHeaders = headers => ({...headers,
+    "Blaze-Version":API_VERSION,"Blaze-Client-Version":CLIENT_VERSION,"Blaze-Client-Contract":String(CLIENT_CONTRACT)});
   async function release() { return validateRelease(parseJSON(await bytes("/api/skill-release",16*1024)),base); }
   function ownedInvocation(meta) { return meta && resolve(dirname(helperPath)) === resolve(paths.root); }
   function status() {
@@ -824,7 +826,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
       const existing = readToolCredential(tool,home);
       if (existing.token) {
         if (existing.origin!==base) throw new Error("Keep the existing credential with its original service");
-        const result = parseJSON(await bytes("/api/stats",32*1024,{headers:{authorization:`Bearer ${existing.token}`}}));
+        const result = parseJSON(await bytes("/api/stats",32*1024,{headers:serviceHeaders({authorization:`Bearer ${existing.token}`})}));
         if (result?.cards!==null && (!Number.isSafeInteger(result?.cards)||result.cards<0)) throw new Error("Invalid service status");
         return {credential:"reused"};
       }
@@ -833,7 +835,7 @@ export function createLifecycle({tool, home = homedir(), origin, helperPath = fi
       exactKeys(pending,new Set(["version","origin","token"]),"Pending registration");
       if (pending.version!==1 || pending.origin!==base || !TOKEN.test(pending.token ?? "")) throw new Error("Pending registration belongs to another service or is invalid");
       save(pendingPath,pending);
-      const data = parseJSON(await bytes("/api/installations",16*1024,{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${pending.token}`,"Idempotency-Key":sha256(pending.token)},body:JSON.stringify({tool})}));
+      const data = parseJSON(await bytes("/api/installations",16*1024,{method:"POST",headers:serviceHeaders({"content-type":"application/json",authorization:`Bearer ${pending.token}`,"Idempotency-Key":sha256(pending.token)}),body:JSON.stringify({tool})}));
       const installId = responseId(data, "install", "installation");
       if (!TOKEN.test(data?.token ?? "") || !installId || data.bootstrap_contract!==2 || data.token!==pending.token) {
         throw new Error("This service does not support retryable registration; keep the saved pending credential");
