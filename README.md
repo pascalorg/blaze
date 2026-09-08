@@ -29,8 +29,10 @@ byte-for-byte; a Solution Card is a lossy semantic distillation of useful lesson
 Both need to fit the current task and pass verification in the current codebase.
 
 The installed client measures request-to-reply time and lets the agent report whether the
-solution worked. The skill instructs the agent to end every Blaze decision with one
-terminal timing line. A numeric comparison is allowed only with a trusted original
+solution worked. Routine lookup, outcome and participation activity stays inside the
+agent workflow. Successful reports are silent by default, and the agent adds no Blaze
+footer, banner, toast, update notice or failure narration unless you ask to inspect it.
+The host may still render generic tool-call or hook activity. A numeric comparison is allowed only with a trusted original
 baseline, matching task/environment context, and the same timing boundary. Otherwise
 saved time is unknown; if no memory was reused, credited savings are zero. Prior-run
 comparisons are labeled estimated, slower runs remain visible, and outcome and
@@ -67,8 +69,8 @@ Update, recovery and uninstall instructions are in [`install.md`](./install.md#f
 
 ## 🔒 What leaves your machine
 
-Automatic hooks send nothing to Blaze. They ignore the raw hook payload and add a local
-reminder that lookup is available. If an agent decides prior knowledge may help, it must
+Automatic hooks send nothing to Blaze. They ignore the raw hook payload and add model-only
+local guidance that lookup is available. If an agent decides prior knowledge may help, it must
 write and inspect a short conceptual problem statement, then call the lookup helper
 explicitly. The client rejects raw-context fields and common secrets, paths, URLs,
 identifiers, code-shaped text, and oversized input before making the request.
@@ -101,8 +103,9 @@ LICENSE                            MIT
 plugins/README.md                  per-tool caveats: merge vs overwrite, trust prompts, event names
 plugins/claude-code/               .claude-plugin/plugin.json, hooks/hooks.json (type: command), blaze-client.mjs, skills/blaze/SKILL.md
 plugins/client/                    shared timing/receipt/outcome helper
-plugins/codex/                     hooks.json (type: command) + blaze-hook.sh — Codex has no HTTP hook
-plugins/opencode/                  blaze.js — chat.message adds local lookup guidance
+plugins/codex/                     hooks.json (type: command) + blaze-hook.sh — model-only local guidance
+plugins/cursor/                    sessionStart template + blaze-hook.sh — model-only local guidance
+plugins/opencode/                  blaze.js — system-context transform, no synthetic chat part
 
 packages/cards/                    @blaze/cards — the only workspace package
   schema.json                      the Solution Card contract, JSON Schema 2020-12
@@ -121,15 +124,17 @@ those copies and release versions. The direct installer downloads only the two f
 listed in public release metadata, verifies their hashes, and keeps recovery backups
 outside skill discovery roots. The optional hook adapters are separate public files.
 
-## ⏱️ What the terminal reports
+## ⏱️ Inspecting timing
 
 ```text
 Blaze · original solve unknown · retrieval 0.28s · time saved unknown
 ```
 
-Original time requires verified provenance and a compatible task/environment. The client
+Run `summary --tool <host> --decision <lookup-id>`, or opt in with
+`outcome ... --output summary`, when you want this diagnostic. Successful `outcome` and
+`participation` commands otherwise print nothing. Original time requires verified provenance and a compatible task/environment. The client
 measures the full reply, including network and parsing. Savings compare compatible task
-intervals, including verification when both runs used that boundary. The final line has
+intervals, including verification when both runs used that boundary. The inspection line has
 three honest comparison states: a numeric estimate backed by a trusted matching baseline,
 `0s credited (no memory reused)`, or `unknown`. A numeric slower comparison is reported as
 slower rather than hidden. Read the [skill](./skill.md) for the exact outcome protocol,
@@ -138,7 +143,7 @@ timing rules, self-report labels, and data boundaries.
 ## 👤 Agent identity and optional human account
 
 The skill uses Blaze's HTTPS API; no MCP server is required. The hook stays local and
-only reminds the agent how to prepare a conceptual lookup. It does not send prompt,
+adds model-only guidance for preparing a conceptual lookup. It does not send prompt,
 repository, path, session, manifest, log, or transcript data. Your tool keeps its
 origin-bound installation token across conversations, projects, and models.
 

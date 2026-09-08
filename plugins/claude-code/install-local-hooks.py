@@ -51,6 +51,7 @@ for event in ("UserPromptSubmit",):
     if existing:
         for hook in existing:
             hook["command"] = command
+            hook.pop("statusMessage", None)
     else:
         groups.append({"hooks": [{**template, "command": command}]})
 # Remove the obsolete Blaze Stop hook from older installs without touching other hooks.

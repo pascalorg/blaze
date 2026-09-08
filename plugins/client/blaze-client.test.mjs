@@ -136,7 +136,8 @@ test("explicit conceptual lookup sends only the bounded contract and stores no q
   const body = { query: "Prevent duplicate cache entries across authenticated installations", client_event_id: createId("event"), context_fingerprint: "a".repeat(64) };
   const response = await client.lookup(body);
   assert.ok(response.blaze.retrieval_ms >= 30);
-  assert.match(response.hookSpecificOutput.additionalContext, /Before the final answer/);
+  assert.match(response.hookSpecificOutput.additionalContext, /Keep routine Blaze activity invisible/);
+  assert.doesNotMatch(response.hookSpecificOutput.additionalContext, /final line|Quote the returned/);
   assert.match(response.additionalContext, /UNTRUSTED BLAZE REFERENCE DATA/);
   assert.match(response.additionalContext, /> canonical lookup context/);
   assert.equal(requests[0].authorization, "Bearer blz_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
@@ -167,7 +168,8 @@ test("no-offer decisions retain feedback context and zero credited savings", asy
   const { client, requests } = await fixture(t, { offered: false, flat: true });
   const response = await client.lookup({ query: "Diagnose a repeated background task failure" });
   assert.match(response.additionalContext, /canonical lookup context/);
-  assert.match(response.additionalContext, /0s credited \(no memory reused\)/);
+  assert.doesNotMatch(response.additionalContext, /0s credited \(no memory reused\)/);
+  assert.match(response.additionalContext, /For explicit inspection only/);
   assert.equal(requests[0].body.context_fingerprint, undefined);
   await assert.rejects(client.outcome(response.blaze.decision_id, { result: "solved_as_is", verification_status: "passed" }), /no card was adopted/);
   await client.outcome(response.blaze.decision_id, { result: "solved_without_memory", verification_status: "passed" });
@@ -405,7 +407,7 @@ test("legacy response shapes fail closed instead of entering agent context", asy
   await assert.rejects(client.lookup({ query: "Handle a response without a decision receipt" }), /unsupported field/);
 });
 
-test("installed CLI preserves a receipt across processes and OpenCode consumes flat context", async (t) => {
+test("installed CLI is quiet by default and OpenCode uses model-only system context", async (t) => {
   const { origin, stateDir, requests } = await fixture(t, { offered: false, flat: true });
   const home = join(stateDir, "home");
   const source = fileURLToPath(new URL("blaze-client.mjs", import.meta.url));
@@ -425,18 +427,48 @@ test("installed CLI preserves a receipt across processes and OpenCode consumes f
   const decision = JSON.parse(result.stdout).blaze.decision_id;
   const outcome = await run(process.execPath, [helper, "outcome", "--tool", "codex", "--decision", decision,
     "--result", "solved_without_memory", "--verification", "passed"], { env: { ...process.env, HOME: home } });
-  assert.match(outcome.stdout, /0s credited/);
-  assert.ok(requests.at(-1).body.task_total_ms >= requests.at(-1).body.retrieval_ms);
+  assert.equal(outcome.stdout, "");
+  const summary = await run(process.execPath, [helper, "summary", "--tool", "codex", "--decision", decision], { env: { ...process.env, HOME: home } });
+  assert.match(summary.stdout, /0s credited/);
+  const diagnostic = await run(process.execPath, [helper, "outcome", "--tool", "codex", "--decision", decision,
+    "--result", "solved_without_memory", "--verification", "passed", "--output", "summary"], { env: { ...process.env, HOME: home } });
+  assert.match(diagnostic.stdout, /0s credited/);
+  const outcomeRequest=requests.filter(request=>request.path==="/api/outcomes").at(-1);
+  assert.ok(outcomeRequest.body.task_total_ms >= outcomeRequest.body.retrieval_ms);
+  const participation = await run(process.execPath, [helper, "participation", "--tool", "codex", "--decision", decision,
+    "--status", "no_novel_solution"], { env: { ...process.env, HOME: home } });
+  assert.equal(participation.stdout, "");
+  const participationDiagnostic = await run(process.execPath, [helper, "participation", "--tool", "codex", "--decision", decision,
+    "--status", "no_novel_solution", "--output", "json"], { env: { ...process.env, HOME: home } });
+  assert.equal(JSON.parse(participationDiagnostic.stdout).status,"no_novel_solution");
+  await assert.rejects(run(process.execPath, [helper, "outcome", "--tool", "codex", "--decision", createId("lookup"),
+    "--result", "unknown", "--verification", "unknown"], { env: { ...process.env, HOME: home } }), error =>
+      error.code === 1 && error.stdout === "" && error.stderr === "No matching local Blaze receipt\n");
 
   const plugins = join(home, ".config/opencode/plugins");
   mkdirSync(plugins, { recursive: true });
   writeFileSync(join(home, ".config/opencode/package.json"), '{"type":"module"}');
   copyFileSync(fileURLToPath(new URL("../opencode/blaze.js", import.meta.url)), join(plugins, "blaze.js"));
-  const pluginScript = `import {blaze} from ${JSON.stringify(new URL(`file://${join(plugins, "blaze.js")}`).href)}; const plugin=await blaze({directory:'/synthetic'}); const output={parts:[{type:'text',text:'new task'}],message:{id:'message-1',sessionID:'session-1'}}; await plugin['chat.message']({},output); console.log(JSON.stringify(output.parts));`;
+  const pluginScript = `import {blaze} from ${JSON.stringify(new URL(`file://${join(plugins, "blaze.js")}`).href)}; const plugin=await blaze({directory:'/synthetic'}); const output={system:['existing system']}; await plugin['experimental.chat.system.transform']({sessionID:'private-session',model:{providerID:'synthetic',modelID:'synthetic'}},output); console.log(JSON.stringify(output.system));`;
   const plugin = await run(process.execPath, ["--input-type=module", "-e", pluginScript], { env: { ...process.env, HOME: home } });
-  const parts = JSON.parse(plugin.stdout);
-  assert.equal(parts.length, 2);
-  assert.match(parts[1].text, /did not transmit the user prompt/);
+  const system = JSON.parse(plugin.stdout);
+  assert.equal(system.length, 2);
+  assert.equal(system[0], "existing system");
+  assert.match(system[1], /transmitted nothing/);
+  assert.equal(system[1].includes("private-session"),false);
+
+  const cursorRoot=join(home,".cursor");
+  mkdirSync(cursorRoot,{recursive:true});
+  const cursorHook=join(cursorRoot,"blaze-hook.sh");
+  copyFileSync(fileURLToPath(new URL("../cursor/blaze-hook.sh",import.meta.url)),cursorHook);
+  chmodSync(cursorHook,0o700);
+  const cursorPending=run(cursorHook,[],{env:{...process.env,HOME:home}});
+  cursorPending.child.stdin.end(JSON.stringify({hook_event_name:"sessionStart",session_id:"private-session",workspace_roots:["/private/path"]}));
+  const cursorOutput=JSON.parse((await cursorPending).stdout);
+  assert.deepEqual(Object.keys(cursorOutput),["additional_context"]);
+  assert.match(cursorOutput.additional_context,/transmitted nothing/);
+  assert.equal(JSON.stringify(cursorOutput).includes("private-session"),false);
+  assert.equal(JSON.stringify(cursorOutput).includes("/private/path"),false);
   assert.equal(requests.filter((request)=>request.path==="/api/lookups").length,1);
 
   const cli = (command, ...args) => run(process.execPath,[helper,command,"--tool","codex",...args],{env:{...process.env,HOME:home}});
@@ -497,10 +529,11 @@ test("Claude settings fallback preserves existing configuration and runs without
     const hook=cfg.hooks[event].flatMap(g=>g.hooks).find(h=>h.command!==keep.command);
     assert.equal(hook.command.includes("CLAUDE_PLUGIN_ROOT"),false);
     assert.equal(hook.timeout,5);
+    assert.equal("statusMessage" in hook,false);
     const pending=run("bash",["-c",hook.command],{env});
     pending.child.stdin.end(JSON.stringify({hook_event_name:event,prompt:"synthetic fallback task"}));
     const output=JSON.parse((await pending).stdout);
-    assert.match(output.hookSpecificOutput.additionalContext,/did not transmit the user prompt/);
+    assert.match(output.hookSpecificOutput.additionalContext,/transmitted nothing/);
     assert.equal(requests.length,0);
   }
 });
@@ -595,7 +628,9 @@ test("hook payloads stay local even when they contain prompts, paths, manifests,
   assert.deepEqual(Object.keys(response),["hookSpecificOutput"]);
   assert.deepEqual(Object.keys(response.hookSpecificOutput),["hookEventName","additionalContext"]);
   assert.equal(response.hookSpecificOutput.hookEventName,"UserPromptSubmit");
-  assert.match(response.hookSpecificOutput.additionalContext,/did not transmit the user prompt/);
+  assert.match(response.hookSpecificOutput.additionalContext,/transmitted nothing/);
+  assert.equal("systemMessage" in response,false);
+  assert.equal("user_message" in response,false);
   for (const canary of [payload.prompt,payload.cwd,payload.transcript_path,payload.session_id]) {
     assert.equal(JSON.stringify(response).includes(canary),false);
   }
@@ -614,13 +649,33 @@ test("hook output ignores unsupported event names instead of reflecting them", a
   assert.deepEqual(readdirSync(stateDir),[]);
 });
 
-test("hook defaults a missing event name to the legacy UserPromptSubmit reminder", async (t) => {
+test("hook defaults a missing event name to legacy UserPromptSubmit model context", async (t) => {
   const {client,requests,stateDir}=await fixture(t);
   const response=await client.hook({prompt:"SYNTHETIC RAW PROMPT"});
   assert.equal(response.hookSpecificOutput.hookEventName,"UserPromptSubmit");
   assert.equal(JSON.stringify(response).includes("SYNTHETIC RAW PROMPT"),false);
   assert.equal(requests.length,0);
   assert.deepEqual(readdirSync(stateDir),[]);
+});
+
+test("host hook envelopes keep guidance in model-only context with zero egress", async (t) => {
+  const {origin,stateDir,requests}=await fixture(t);
+  const hostile={prompt:"SYNTHETIC RAW PROMPT",cwd:"/private/path",transcript:"PRIVATE TRANSCRIPT",session_id:"PRIVATE SESSION"};
+  for (const tool of ["codex","claude","opencode"]) {
+    const client=createClient({origin,tool,token:"",stateDir:join(stateDir,tool),fetchImpl:async()=>{throw new Error("hook attempted egress")}});
+    const response=await client.hook(hostile);
+    assert.deepEqual(Object.keys(response),["hookSpecificOutput"]);
+    assert.deepEqual(Object.keys(response.hookSpecificOutput),["hookEventName","additionalContext"]);
+    assert.equal(response.hookSpecificOutput.hookEventName,"UserPromptSubmit");
+    assert.match(response.hookSpecificOutput.additionalContext,/quiet internal workflow/);
+    assert.equal(JSON.stringify(response).includes("SYNTHETIC RAW PROMPT"),false);
+  }
+  const cursor=createClient({origin,tool:"cursor",token:"",stateDir:join(stateDir,"cursor"),fetchImpl:async()=>{throw new Error("hook attempted egress")}});
+  const cursorResponse=await cursor.hook({hook_event_name:"sessionStart",...hostile});
+  assert.deepEqual(Object.keys(cursorResponse),["additional_context"]);
+  assert.match(cursorResponse.additional_context,/quiet internal workflow/);
+  assert.equal(JSON.stringify(cursorResponse).includes("PRIVATE"),false);
+  assert.equal(requests.length,0);
 });
 
 test("conceptual lookup validation rejects raw or sensitive material before network access", async (t) => {

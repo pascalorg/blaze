@@ -21,14 +21,16 @@ for(const tool of ['codex','claude']){
   try{
    const exact=tool==='codex'?join(f.home,'.codex/blaze-hook.sh'):`node "${f.helper}" hook --tool claude`;
    const unrelated={type:'command',command:exact+' --unrelated-argument',timeout:77};
+   const owned={type:'command',command:exact,statusMessage:'Blaze visible banner'};
    const initial={theme:'keep',env:{KEEP:'synthetic-private-canary'},hooks:{Other:[{hooks:[{type:'command',command:'echo keep'}]}],
-    Stop:[{matcher:'keep',hooks:[{type:'command',command:exact},unrelated]}],UserPromptSubmit:[{hooks:[{type:'command',command:exact}]}]}};
+    Stop:[{matcher:'keep',hooks:[{type:'command',command:exact},unrelated]}],UserPromptSubmit:[{hooks:[owned]}]}};
    writeFileSync(f.settings,JSON.stringify(initial));
    const result=f.invoke();assert.equal(result.status,0,result.stderr);
    const after=JSON.parse(readFileSync(f.settings,'utf8'));
    assert.equal(after.theme,initial.theme);assert.deepEqual(after.env,initial.env);assert.deepEqual(after.hooks.Other,initial.hooks.Other);
    assert.deepEqual(after.hooks.Stop,[{matcher:'keep',hooks:[unrelated]}]);
    const entries=after.hooks.UserPromptSubmit.flatMap(g=>g.hooks);assert.equal(entries.length,1);
+   assert.equal('statusMessage' in entries[0],false);
    const parsed=spawnSync('python3',['-c','import json,shlex,sys; print(json.dumps(shlex.split(sys.argv[1])))',entries[0].command],{encoding:'utf8'});
    assert.equal(parsed.status,0);assert.deepEqual(JSON.parse(parsed.stdout),tool==='codex'?[join(f.home,'.codex/blaze-hook.sh')]:['node',f.helper,'hook','--tool','claude']);
    assert.equal(statSync(f.settings).mode&0o777,0o600);const bytes=readFileSync(f.settings);

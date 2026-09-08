@@ -25,9 +25,16 @@ assert.equal(marketplace.plugins[0].source,"./plugins/claude-code");assert.equal
 for (const version of [plugin.version,marketplace.metadata.version,marketplace.plugins[0].version]) assert.equal(version,release.version);
 const claudeHooks = json("plugins/claude-code/hooks/hooks.json").hooks;
 const codexHooks = json("plugins/codex/hooks.json").hooks;
+const cursorHooks = json("plugins/cursor/hooks.json");
 for(const hooks of [claudeHooks,codexHooks]) assert.deepEqual(Object.keys(hooks),["UserPromptSubmit"]);
 assert.equal(claudeHooks.UserPromptSubmit[0].hooks[0].command,'node "${CLAUDE_PLUGIN_ROOT}/blaze-client.mjs" hook --tool claude');
+assert.equal("statusMessage" in claudeHooks.UserPromptSubmit[0].hooks[0],false);
 assert.equal(codexHooks.UserPromptSubmit[0].hooks[0].command,"~/.codex/blaze-hook.sh");
+assert.equal(cursorHooks.version,1);assert.deepEqual(Object.keys(cursorHooks.hooks),["sessionStart"]);
+assert.equal(cursorHooks.hooks.sessionStart[0].command,"./blaze-hook.sh");
 assert.equal(Bun.spawnSync(["bash","-n",resolve(root,"plugins/codex/blaze-hook.sh")]).exitCode,0);
+assert.equal(Bun.spawnSync(["bash","-n",resolve(root,"plugins/cursor/blaze-hook.sh")]).exitCode,0);
 for(const path of ["plugins/opencode/blaze.js","plugins/client/blaze-client.mjs"]) new Bun.Transpiler({loader:"js"}).transformSync(read(path));
+assert.ok(read("plugins/opencode/blaze.js").includes('"experimental.chat.system.transform"'));
+assert.ok(!read("plugins/opencode/blaze.js").includes('"chat.message"'));
 console.log("Portable skill, plugin copies, release metadata and local hook syntax agree.");

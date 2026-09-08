@@ -29,26 +29,31 @@ OpenCode uses `~/.config/opencode/skills/blaze`. A shared bundle has one update
 lock and pin; removing it affects every host using that directory. Host discovery,
 profile configuration, permissions and marketplace review remain separate checks.
 
-## Optional reminder adapters
+## Optional quiet adapters
 
 | Host | Event | Adapter |
 | --- | --- | --- |
-| Claude Code | `UserPromptSubmit` | `claude-code/hooks/hooks.json` invokes the plugin-root helper |
-| Codex | `UserPromptSubmit` where supported and trusted | `codex/blaze-hook.sh` invokes the shared skill helper |
-| OpenCode | `chat.message` | `opencode/blaze.js` adds fixed local guidance |
+| Claude Code | `UserPromptSubmit` | `claude-code/hooks/hooks.json` returns model-only context without a status message |
+| Codex | `UserPromptSubmit` where supported and trusted | `codex/blaze-hook.sh` returns model-only context from the shared helper |
+| Cursor | `sessionStart` | `cursor/blaze-hook.sh` returns `additional_context` without a user message |
+| OpenCode | `experimental.chat.system.transform` | `opencode/blaze.js` appends fixed system context without a synthetic chat part |
 
 Hooks never send a prompt, transcript, directory, source, environment, manifest,
 log or session identifier. They do not perform a lookup, version check, update,
 contribution or outcome report. An explicit helper command is required for each
-service operation. Stop events do not infer success.
+service operation. Stop events do not infer success. They add no Blaze banner,
+footer, toast, update notice, or user-facing message. The host may still render its
+own generic hook or tool-call interface.
 
 For a direct install, the optional Python scripts in `claude-code/` and `codex/`
-merge owned reminder entries and remove only exact known obsolete Blaze Stop
+merge owned guidance entries and remove only exact known obsolete Blaze Stop
 commands. Inspect them first. Install the Codex forwarder at
 `~/.codex/blaze-hook.sh` before merging its entry. Place the OpenCode adapter in
-the active host's documented plugin directory; do not copy it into several
-possible roots and create duplicate hooks. Native plugin users do not also need
-a direct settings hook.
+the active host's documented plugin directory; replace an older Blaze adapter
+because portable skill updates do not manage optional adapters. For Cursor, merge
+the template into `~/.cursor/hooks.json` and place its forwarder beside that file.
+Do not copy adapters into several possible roots and create duplicate hooks. Native
+plugin users do not also need a direct settings hook.
 
 Respect the host's approval and reload process. Never edit trust approvals to
 make a hook run. A new conversation is a useful reload boundary, but discovery
@@ -67,6 +72,8 @@ Receipts store only IDs, categories, origin and timings. Outcome retries retain
 an exact event and payload. A fixed contribution disposition closes each lookup,
 including no-match decisions and deliberate privacy or verification skips.
 Self-reports are weak feedback, not independent verification or publishing rights.
+Successful outcome and participation CLI commands are silent by default. `summary`,
+`status`, `stats`, and explicit `--output` modes remain available for inspection.
 
 Contributions are explicit minimized envelopes, private by default. Public
 sharing requires authorization for the exact candidate, followed by independent
