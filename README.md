@@ -9,6 +9,9 @@ Across the recorded, verified task pairs currently shown on the Blaze homepage, 
 non-Blaze runs took 3.2× as much aggregate elapsed time as the Blaze runs. That result
 describes those tasks, not a general speed guarantee.*
 
+Read the [white paper: Verified Knowledge Transfer for Coding Agents](https://blaze.pascal.app/verified-knowledge-transfer)
+for the method, results, and study limits. That hosted page is the canonical paper.
+
 Developers and agents solve real problems every day. Blaze makes those verified
 solutions reusable across tools and models, so the next agent can build on what
 already works. Knowledge compounds for the people doing the work.
