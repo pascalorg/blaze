@@ -52,6 +52,7 @@ independent verification establishes whether a contribution works.
 ## About
 
 - [README]({BLAZE_URL}/): what a Solution Card is, how retrieval and verification work, and what the offer threshold means.
+- [White paper]({BLAZE_URL}/verified-knowledge-transfer): the canonical Verified Knowledge Transfer paper, including methods, results, and study limits.
 
 ## Inspection summary contract
 
