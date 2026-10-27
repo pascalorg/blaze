@@ -5,7 +5,7 @@ contract. It works as a standalone checkout.
 
 ## Local checks
 
-Install Bun 1.4.0 (also pinned in `package.json`), then:
+Install Bun 1.4.4 (also pinned in `package.json`), then:
 
 ```bash
 git clone https://github.com/pascalorg/blaze.git
