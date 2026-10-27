@@ -3,7 +3,7 @@
   "private": true,
   "description": "Blaze install instructions, agent skill, per-tool plugins, and Solution Card schema.",
   "license": "MIT",
-  "packageManager": "bun@1.4.0",
+  "packageManager": "bun@1.4.4",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/pascalorg/blaze.git"
